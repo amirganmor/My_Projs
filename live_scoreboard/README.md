@@ -93,8 +93,8 @@ flowchart TD
 ## Quick Start
 
 ```bash
-git clone https://github.com/dreamgroup-il/nba-proj.git
-cd nba-proj
+git clone https://github.com/amirganmor/My_Projs.git
+cd live_scoreboard
 docker compose up -d --build
 ```
 
@@ -225,9 +225,3 @@ The ball animation system uses a persistent `BallController` JavaScript class th
 - **Additional Leagues** -- Bundesliga, Serie A, MLS, MLB, NHL (architecture supports any league with a public API)
 
 ---
-
-## Documentation
-
-- [PRESENTATION.md](PRESENTATION.md) -- Slide-by-slide presentation content
-- [TUTORIAL.md](TUTORIAL.md) -- YouTube tutorial script (10-15 min)
-- [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) -- Full database schema and example queries
