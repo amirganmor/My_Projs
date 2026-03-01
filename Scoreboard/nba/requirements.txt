@@ -1,3 +1,0 @@
-nba_api
-kafka-python-ng
-requests
