@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.*
+
+# Docker volumes (local data)
+pgdata/
+
+# Cursor / plan files
+*.plan.md
+
+# Spark checkpoints (local)
+spark_checkpoint/
+
+# Byte-compiled / cached
+*.pyo
+*.pdb
