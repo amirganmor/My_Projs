@@ -28,6 +28,12 @@ CREATE TABLE IF NOT EXISTS match_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_match_events_game ON match_events (league, game_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_match_events_unique
+    ON match_events (league, game_id, event_type,
+                     COALESCE(minute, -1),
+                     COALESCE(player_name, ''),
+                     COALESCE(player_out, ''),
+                     team);
 
 CREATE TABLE IF NOT EXISTS period_scores (
     id SERIAL PRIMARY KEY,
@@ -40,6 +46,8 @@ CREATE TABLE IF NOT EXISTS period_scores (
 );
 
 CREATE INDEX IF NOT EXISTS idx_period_scores_game ON period_scores (league, game_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_period_scores_unique
+    ON period_scores (league, game_id, period_number, home_score, away_score);
 
 CREATE TABLE IF NOT EXISTS player_season_stats (
     id SERIAL PRIMARY KEY,
