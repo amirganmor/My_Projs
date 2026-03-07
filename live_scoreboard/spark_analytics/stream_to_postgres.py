@@ -99,6 +99,26 @@ def pg_write(df, table, mode="append"):
     )
 
 
+def pg_merge(df, target_table, staging_suffix="_staging"):
+    """Write via staging table + INSERT ON CONFLICT DO NOTHING to prevent duplicates."""
+    staging = f"{target_table}{staging_suffix}"
+    pg_write(df, staging, mode="overwrite")
+
+    conn = spark._jvm.java.sql.DriverManager.getConnection(PG_URL, PG_USER, PG_PASS)
+    try:
+        stmt = conn.createStatement()
+        columns = ", ".join(df.columns)
+        stmt.executeUpdate(
+            f"INSERT INTO {target_table} ({columns}) "
+            f"SELECT {columns} FROM {staging} "
+            f"ON CONFLICT DO NOTHING"
+        )
+        stmt.executeUpdate(f"DROP TABLE IF EXISTS {staging}")
+        stmt.close()
+    finally:
+        conn.close()
+
+
 def write_batch(batch_df, batch_id):
     """Process a micro-batch: write scores, period scores, and match events to Postgres."""
     if batch_df.count() == 0:
@@ -117,8 +137,11 @@ def write_batch(batch_df, batch_id):
             col("game.statusText").alias("status_text"),
             current_timestamp().alias("ingested_at"),
         )
-        pg_write(scores_df, "game_scores")
+        pg_merge(scores_df, "game_scores")
+    except Exception as e:
+        logger.error("Batch %s scores write error: %s", batch_id, e)
 
+    try:
         has_periods = batch_df.filter(size(col("game.periods")) > 0)
         if has_periods.count() > 0:
             periods_df = (
@@ -133,8 +156,11 @@ def write_batch(batch_df, batch_id):
                     current_timestamp().alias("ingested_at"),
                 )
             )
-            pg_write(periods_df, "period_scores")
+            pg_merge(periods_df, "period_scores")
+    except Exception as e:
+        logger.error("Batch %s periods write error: %s", batch_id, e)
 
+    try:
         has_events = batch_df.filter(size(col("game.events")) > 0)
         if has_events.count() > 0:
             events_df = (
@@ -152,11 +178,11 @@ def write_batch(batch_df, batch_id):
                     current_timestamp().alias("ingested_at"),
                 )
             )
-            pg_write(events_df, "match_events")
+            pg_merge(events_df, "match_events")
     except Exception as e:
-        logger.error("Batch %s write error: %s", batch_id, e)
-    finally:
-        batch_df.unpersist()
+        logger.error("Batch %s events write error: %s", batch_id, e)
+
+    batch_df.unpersist()
 
 
 query = (
