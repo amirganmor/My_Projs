@@ -110,17 +110,23 @@ class SoccerEngine:
         """Extract goal, card, and substitution events from ESPN key events."""
         events = []
         for kev in data.get("keyEvents", []):
-            play = kev.get("play", {})
+            play = kev.get("play", kev)
             clock = play.get("clock", {})
             minute = clock.get("displayValue", "")
             minute_int = None
             if minute:
                 try:
-                    minute_int = int(minute.strip("'").split(":")[0])
+                    minute_int = int(minute.strip("'").split("+")[0].split(":")[0])
                 except (ValueError, IndexError):
                     pass
+            if minute_int is None and clock.get("value"):
+                try:
+                    minute_int = int(float(clock["value"]) / 60)
+                except (ValueError, TypeError):
+                    pass
 
-            ptype = play.get("type", {}).get("text", "").lower()
+            type_obj = play.get("type", {})
+            ptype = (type_obj.get("text", "") if isinstance(type_obj, dict) else str(type_obj)).lower()
             team_name = play.get("team", {}).get("displayName", "")
             participants = play.get("participants", [])
             player_name = participants[0].get("athlete", {}).get("displayName", "") if participants else ""
