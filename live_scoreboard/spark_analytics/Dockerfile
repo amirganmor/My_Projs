@@ -4,6 +4,8 @@ USER root
 
 RUN pip install pyspark==3.5.0
 
+RUN mkdir -p /tmp/spark_checkpoint && chown spark:spark /tmp/spark_checkpoint
+
 # Pre-download Kafka + PostgreSQL JARs and all transitive dependencies at build time
 RUN mkdir -p /opt/spark/extra-jars && \
     cd /opt/spark/extra-jars && \
@@ -21,3 +23,4 @@ ENTRYPOINT ["/opt/spark/bin/spark-submit", \
     "--master", "spark://spark-master:7077", \
     "--jars", "/opt/spark/extra-jars/spark-sql-kafka-0-10_2.12-3.5.0.jar,/opt/spark/extra-jars/kafka-clients-3.4.1.jar,/opt/spark/extra-jars/spark-token-provider-kafka-0-10_2.12-3.5.0.jar,/opt/spark/extra-jars/commons-pool2-2.11.1.jar,/opt/spark/extra-jars/postgresql-42.7.1.jar", \
     "/opt/spark/work-dir/stream_to_postgres.py"]
+
