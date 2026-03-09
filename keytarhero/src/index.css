@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-heading: "Russo One", sans-serif;
+  --color-game-bg: #0f0f1a;
+  --color-lane-green: #22c55e;
+  --color-lane-red: #ef4444;
+  --color-lane-yellow: #facc15;
+  --color-lane-blue: #3b82f6;
+  --color-lane-orange: #f97316;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-game-bg);
+  color: white;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { text-shadow: 0 0 40px rgba(250, 204, 21, 0.6), 0 0 80px rgba(250, 204, 21, 0.3); }
+  50% { text-shadow: 0 0 60px rgba(250, 204, 21, 0.8), 0 0 120px rgba(250, 204, 21, 0.4); }
+}
