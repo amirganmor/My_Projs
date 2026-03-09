@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
-RUN npm run build
+RUN rm -rf node_modules/.cache && npm ci && npm run build
 
 # Stage 2: Serve with lightweight static server
 FROM nginx:alpine
