@@ -1,0 +1,58 @@
+# NBA Athlete Performance Lakehouse — Global Settings
+
+project:
+  name: "NBA Athlete Performance Lakehouse"
+  version: "1.0.0"
+
+seasons:
+  start: "2004-05"
+  end: "2024-25"
+  training_cutoff: "2022-23"    # last season used for training
+  validation_season: "2023-24"
+  scoring_season: "2024-25"      # the season we score/predict
+
+fetch:
+  default_mode: "offline"        # offline | refresh
+  request_delay_seconds: 0.7
+  shot_detail_recent_seasons: 5
+
+ingestion:
+  batch_id_prefix: "batch"
+  source_names:
+    nba_api: "nba_api"
+    advanced_metrics: "advanced_metrics"
+    historical_bulk: "historical_bulk"
+    shot_charts: "shot_charts"
+    postgres_contracts: "postgres_contracts"
+    postgres_injuries: "postgres_injuries"
+    postgres_rosters: "postgres_rosters"
+    mongo_profiles: "mongo_profiles"
+    mongo_scouting: "mongo_scouting"
+
+iceberg:
+  bronze_namespace: "bronze"
+  silver_namespace: "silver"
+  gold_namespace: "gold"
+
+ml:
+  value_model:
+    name: "player_value_model"
+    target: "salary"
+    algorithm: "random_forest"
+    test_size: 0.2
+  improvement_model:
+    name: "player_improvement_model"
+    target: "improved_flag"
+    algorithm: "gradient_boosting"
+    test_size: 0.2
+  trade_target:
+    name: "trade_target_scoring"
+    method: "composite_score"
+
+mlflow:
+  experiment_prefix: "nba_lakehouse"
+
+quality:
+  null_threshold: 0.10            # max 10% nulls in key columns
+  min_row_count_bronze: 100
+  min_row_count_silver: 50

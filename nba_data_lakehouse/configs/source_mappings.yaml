@@ -1,0 +1,67 @@
+# Maps each source family to its type, location, and bronze target tables.
+
+sources:
+  nba_api:
+    type: "api"
+    description: "Official-style NBA stats from nba_api cached responses"
+    location: "data/seed/api_mock"
+    offline_mode: true
+    live_mode_available: true
+    bronze_tables:
+      - bronze.nba_api_players
+      - bronze.nba_api_teams
+      - bronze.nba_api_player_season_stats
+      - bronze.nba_api_player_gamelogs
+      - bronze.nba_api_games
+      - bronze.nba_api_standings
+
+  advanced_metrics:
+    type: "file_csv"
+    description: "Advanced efficiency and impact metrics (separate analytics source)"
+    location: "data/seed/files/advanced_metrics"
+    offline_mode: true
+    live_mode_available: true
+    bronze_tables:
+      - bronze.advanced_player_metrics
+
+  historical_bulk:
+    type: "file_csv"
+    description: "Historical bulk export (Kaggle-style batch data)"
+    location: "data/seed/files/historical"
+    offline_mode: true
+    live_mode_available: false
+    bronze_tables:
+      - bronze.historical_player_seasons
+      - bronze.historical_box_scores
+      - bronze.historical_team_standings
+
+  shot_charts:
+    type: "file_mixed"
+    description: "Shot-level and zone-level shooting data"
+    location: "data/seed/files/shot_charts"
+    offline_mode: true
+    live_mode_available: true
+    bronze_tables:
+      - bronze.shot_chart_zones
+      - bronze.shot_chart_details
+
+  postgres_sources:
+    type: "sql"
+    description: "Salary/contract, injury, and roster data in PostgreSQL"
+    location: "postgres://postgres:5432/nba_sources"
+    offline_mode: true
+    live_mode_available: false
+    bronze_tables:
+      - bronze.contracts
+      - bronze.injuries
+      - bronze.rosters
+
+  mongo_sources:
+    type: "nosql"
+    description: "Scouting reports and player profile narratives in MongoDB"
+    location: "mongodb://mongo:27017/nba_scouting"
+    offline_mode: true
+    live_mode_available: false
+    bronze_tables:
+      - bronze.mongo_player_profiles
+      - bronze.mongo_scouting_reports

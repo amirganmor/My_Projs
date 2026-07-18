@@ -1,0 +1,88 @@
+# Feature engineering definitions for ML models.
+
+value_model_features:
+  description: "Player-season features for predicting market value (salary)"
+  grain: "player_id + season"
+  target: "salary"
+  features:
+    demographic:
+      - age
+      - years_pro
+      - draft_pick
+    performance_base:
+      - gp
+      - mpg
+      - ppg
+      - rpg
+      - apg
+      - spg
+      - bpg
+      - topg
+      - fg_pct
+      - fg3_pct
+      - ft_pct
+    performance_advanced:
+      - ts_pct
+      - efg_pct
+      - usg_pct
+      - off_rating
+      - def_rating
+      - net_rating
+      - pie
+      - pace
+    injury:
+      - total_games_missed
+      - injury_count
+    team_context:
+      - team_win_pct
+      - team_playoff_flag
+    shot_profile:
+      - pct_fga_3pt
+      - pct_fga_midrange
+      - pct_fga_paint
+    prior_season:
+      - prev_ppg
+      - prev_rpg
+      - prev_apg
+      - prev_mpg
+
+improvement_model_features:
+  description: "Player-season features for predicting improvement next season"
+  grain: "player_id + season"
+  target: "improved_flag"
+  features:
+    base_stats:
+      - age
+      - years_pro
+      - gp
+      - mpg
+      - ppg
+      - rpg
+      - apg
+    efficiency:
+      - ts_pct
+      - usg_pct
+      - net_rating
+      - pie
+    trajectory:
+      - ppg_delta     # current - previous season
+      - rpg_delta
+      - apg_delta
+      - mpg_delta
+      - ts_pct_delta
+    durability:
+      - injury_count
+      - games_missed
+    shot_development:
+      - fg3_pct
+      - fg3_pct_delta
+      - pct_fga_3pt_delta
+
+trade_target_score_weights:
+  description: "Composite scoring weights for trade target ranking"
+  performance_score: 0.30
+  contract_efficiency: 0.25
+  age_upside: 0.15
+  durability: 0.10
+  shot_profile_fit: 0.10
+  scouting_grade: 0.10

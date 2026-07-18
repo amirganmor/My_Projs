@@ -1,0 +1,193 @@
+version: "3.9"
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: infra/airflow/Dockerfile
+  env_file: .env
+  environment:
+    PYTHONPATH: /opt/airflow
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./jobs:/opt/airflow/jobs
+    - ./configs:/opt/airflow/configs
+    - ./data:/opt/airflow/data
+    - airflow-logs:/opt/airflow/logs
+  networks:
+    - lakehouse-net
+  depends_on:
+    postgres:
+      condition: service_healthy
+    minio-init:
+      condition: service_completed_successfully
+    nessie:
+      condition: service_started
+    mongo:
+      condition: service_started
+
+services:
+  # ── Object Storage ────────────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    container_name: nba-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lakehouse-net
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-06-12T14-34-03Z
+    container_name: nba-minio-init
+    entrypoint: /bin/sh
+    command: /init/minio_init.sh
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./infra/minio/init.sh:/init/minio_init.sh
+      - ./data/seed:/seed_data
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - lakehouse-net
+
+  # ── Iceberg Catalog ──────────────────────────────────────
+  nessie:
+    image: projectnessie/nessie:0.76.0
+    container_name: nba-nessie
+    ports:
+      - "19120:19120"
+    networks:
+      - lakehouse-net
+
+  # ── Relational Source DB + Airflow/MLflow metadata ───────
+  postgres:
+    image: postgres:16
+    container_name: nba-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./infra/postgres/init/01_create_dbs.sh:/docker-entrypoint-initdb.d/01_create_dbs.sh
+      - ./infra/postgres/init/02_seed_schema.sql:/docker-entrypoint-initdb.d/02_seed_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lakehouse-net
+
+  # ── Document Source DB ───────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: nba-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./infra/mongo/init/seed_mongo.js:/docker-entrypoint-initdb.d/seed_mongo.js
+    networks:
+      - lakehouse-net
+
+  # ── Airflow ──────────────────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    container_name: nba-airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: nba-airflow-webserver
+    command: airflow webserver --port 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: nba-airflow-scheduler
+    command: airflow scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ── MLflow ───────────────────────────────────────────────
+  mlflow:
+    build:
+      context: .
+      dockerfile: infra/mlflow/Dockerfile
+    container_name: nba-mlflow
+    env_file: .env
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+    ports:
+      - "5001:5001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+
+  # ── Streamlit Dashboard ──────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: infra/dashboard/Dockerfile
+    container_name: nba-dashboard
+    env_file: .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./apps/dashboard:/app
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+
+volumes:
+  minio-data:
+  pg-data:
+  mongo-data:
+  airflow-logs:
+
+networks:
+  lakehouse-net:
+    driver: bridge
