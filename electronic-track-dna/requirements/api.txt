@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+qdrant-client
+httpx
+pydantic>=2.0
+yt-dlp
+librosa
+soundfile
+numpy
+transformers
+sentence-transformers
