@@ -1,0 +1,291 @@
+# Source registry: static, human-reviewed facts about each source.
+# Discovered facts (counts, checksums, sizes, retrieved timestamps) are written by
+# `smip sources inventory|download` into data/catalog/manifest.lock.json and rendered
+# into docs/DATA_SOURCES.md. Never hand-edit discovered counts here.
+#
+# license fields: record what the publisher states. "unknown" means no statement was found.
+# redistributable_demo: may appear in the default public demo (screenshots / YouTube) with attribution.
+schema_version: 1
+sources:
+  skillcorner:
+    publisher: SkillCorner
+    sport: soccer
+    priority: P0
+    url: https://github.com/SkillCorner/opendata
+    kind: github_lfs
+    repo: SkillCorner/opendata
+    pinned_revision: 4340d274572876239c154c90bc507a9b3250a656
+    competitions: ["AUS - A-League - 2024/2025 (per data/matches.json)"]
+    capabilities:
+      continuous_tracking: true
+      ball_coordinates: true
+      ball_height: true          # z present in ball_data; accuracy not documented
+      event_coordinates: true    # dynamic_events (SkillCorner-derived, not a provider event feed)
+      snapshots: false
+      identity: true             # README: ~97% identity accuracy
+      outcomes: partial          # match score, phase possession outcomes
+      pose: optional             # bodypose for selected matches / Hugging Face
+      footage: false
+      detection_flag: true       # is_detected per entity; no confidence score
+    sample_rate_hz: 10
+    units: meters, origin at pitch center, pitch_length/pitch_width in match.json
+    data_license: "MIT (repository root LICENSE covers repository contents; README asks users to credit SkillCorner)"
+    code_license: MIT
+    attribution: "Tracking data: SkillCorner Open Data (https://github.com/SkillCorner/opendata)."
+    redistribution: "Permitted under MIT with notice; we do not redistribute raw files, only derived views with credit."
+    redistributable_demo: true
+    access_status: verified_download
+    caveats:
+      - "Tracking files are Git LFS objects; raw.githubusercontent returns a pointer. Fetch via media.githubusercontent.com."
+      - "Positions for undetected players are provider-extrapolated (is_detected=false)."
+      - "Snapshot contents change on master; we pin a commit SHA."
+  metrica:
+    publisher: Metrica Sports
+    sport: soccer
+    priority: P0
+    url: https://github.com/metrica-sports/sample-data
+    kind: github_raw
+    repo: metrica-sports/sample-data
+    pinned_revision: e706dd506b360d69d9d123d5b8026e7294b13996
+    competitions: ["anonymized sample games"]
+    capabilities:
+      continuous_tracking: true
+      ball_coordinates: true
+      ball_height: false
+      event_coordinates: true
+      snapshots: false
+      identity: anonymized
+      outcomes: true
+      pose: false
+      footage: false
+      detection_flag: false
+    sample_rate_hz: 25
+    units: "normalized 0..1, (0,0) top-left; README states 105x68 m pitch"
+    data_license: "unknown (no license file; README: 'be responsible' and 'acknowledge the source' for public use)"
+    code_license: "none"
+    attribution: "Sample tracking and event data: Metrica Sports (https://github.com/metrica-sports/sample-data)."
+    redistribution: "Unknown; acknowledgement requested for public use. Not redistributed."
+    redistributable_demo: false
+    access_status: verified_download
+    caveats:
+      - "Players and teams are anonymized and must remain anonymous."
+      - "Sample_Game_3 uses EPTS/FIFA format (different adapter path)."
+  sportvu:
+    publisher: "STATS SportVU via NBA.com (archived by linouk23/NBA-Player-Movements)"
+    sport: basketball
+    priority: P0
+    url: https://github.com/linouk23/NBA-Player-Movements
+    kind: github_lfs_or_raw
+    repo: linouk23/NBA-Player-Movements
+    pinned_revision: f7d4cf2c7e607029abfd5715a0d4073bedae328e
+    path: data/2016.NBA.Raw.SportVU.Game.Logs
+    competitions: ["NBA 2015-16 (partial season)"]
+    capabilities:
+      continuous_tracking: true
+      ball_coordinates: true
+      ball_height: true
+      event_coordinates: false
+      snapshots: false
+      identity: true
+      outcomes: false            # needs play-by-play join (nba_api) with validated alignment
+      pose: false
+      footage: false
+      detection_flag: false
+    sample_rate_hz: 25
+    units: "feet, court 94x50, origin at a corner"
+    data_license: "unknown (no license in archive repository; original publisher terms not stated)"
+    code_license: "none declared"
+    attribution: "NBA SportVU tracking logs (2015-16), archived at https://github.com/linouk23/NBA-Player-Movements."
+    redistribution: "Unknown. Local research use only; not redistributed; excluded from default public demo."
+    redistributable_demo: false
+    access_status: verified_download
+    caveats:
+      - "Events (plays) overlap: identical moments appear in consecutive events; must deduplicate by timestamp."
+      - "Game clock stops during dead balls; wall-clock ms timestamps come from the source."
+  sportvu_pbp:
+    publisher: "NBA.com stats play-by-play for the SportVU games (archived by sealneaward/nba-movement-data)"
+    sport: basketball
+    priority: P1
+    url: https://github.com/sealneaward/nba-movement-data
+    kind: github_raw
+    repo: sealneaward/nba-movement-data
+    pinned_revision: 5c9ee6e1387e052c19ab2d22e12120c2210cbe54
+    path: data/events
+    competitions: ["NBA 2015-16 (the archived SportVU games)"]
+    capabilities:
+      continuous_tracking: false
+      ball_coordinates: false
+      ball_height: false
+      event_coordinates: false
+      snapshots: false
+      identity: true
+      outcomes: true             # running score per scoring event
+      pose: false
+      footage: false
+      detection_flag: false
+    data_license: "unknown (repository is MIT, which covers its code; the play-by-play is NBA.com data with no stated license)"
+    code_license: MIT
+    attribution: "Play-by-play: NBA.com stats, archived at https://github.com/sealneaward/nba-movement-data."
+    redistribution: "Unknown. Local research use only; excluded from default public demo."
+    redistributable_demo: false
+    access_status: verified_download
+    caveats:
+      - "Used only for the running score on SportVU replays (`smip sources scores`)."
+      - "Scores are placed at the first tracked frame whose game clock reaches the event, so points scored while the clock is stopped (free throws) appear at the start of that stoppage."
+      - "NBA.com's own endpoints block automated requests; this archive is used instead of working around that."
+  statsbomb:
+    publisher: "StatsBomb / Hudl"
+    sport: soccer
+    priority: P1
+    url: https://github.com/hudl/open-data
+    kind: github_raw
+    repo: hudl/open-data
+    pinned_revision: 4b73468fc5b0f1950f9f66fada70ad3a4f9327cb
+    competitions: ["see data/competitions.json at pinned revision"]
+    capabilities:
+      continuous_tracking: false
+      ball_coordinates: false
+      ball_height: false
+      event_coordinates: true
+      snapshots: true            # 360 freeze frames for selected matches
+      identity: true
+      outcomes: true
+      pose: false
+      footage: false
+      detection_flag: false
+    units: "StatsBomb standardized pitch 120x80 units (not physical meters)"
+    data_license: "StatsBomb Public Data User Agreement (LICENSE.pdf in repository)"
+    code_license: "n/a"
+    attribution: "Event data: StatsBomb Open Data (https://github.com/hudl/open-data). Use the StatsBomb logo per their media pack when publishing."
+    redistribution: "Governed by user agreement; attribution + logo required when publishing analysis. Not redistributed."
+    redistributable_demo: true
+    access_status: verified_download
+    caveats:
+      - "360 freeze frames are event-anchored snapshots of visible players, not continuous tracks."
+      - "Provider xG (shot.statsbomb_xg) is an external estimate; never used as a feature."
+  wyscout:
+    publisher: "Pappalardo et al. / Wyscout (Scientific Data 2019 research release)"
+    sport: soccer
+    priority: P1
+    url: https://figshare.com/collections/Soccer_match_event_dataset/4415000
+    kind: figshare
+    figshare_articles:
+      events: 7770599
+      matches: 7770422
+      players: 7765196
+      teams: 7765310
+      competitions: 7765316
+      eventid2name: 11743836
+      tags2name: 11743818
+    competitions: ["2017/18 top-5 European leagues, World Cup 2018, Euro 2016"]
+    capabilities:
+      continuous_tracking: false
+      ball_coordinates: false
+      ball_height: false
+      event_coordinates: true
+      snapshots: false
+      identity: true
+      outcomes: true
+      pose: false
+      footage: false
+      detection_flag: false
+    units: "percent of pitch 0..100 (not physical meters)"
+    data_license: "CC BY 4.0 (per figshare item metadata)"
+    code_license: "n/a"
+    attribution: "Pappalardo, L., Cintia, P., Rossi, A. et al. A public data set of spatio-temporal match events in soccer competitions. Sci Data 6, 236 (2019). Data: figshare collection 4415000, CC BY 4.0."
+    redistribution: "CC BY 4.0 with attribution."
+    redistributable_demo: true
+    access_status: verified_download
+    caveats:
+      - "This is a specific 2019 research release, not access to the commercial Wyscout product."
+  nba_api:
+    publisher: "NBA.com stats endpoints via swar/nba_api client"
+    sport: basketball
+    priority: P1
+    url: https://github.com/swar/nba_api
+    kind: http_api
+    competitions: ["NBA historical seasons (endpoint-dependent)"]
+    capabilities:
+      continuous_tracking: false
+      ball_coordinates: false
+      ball_height: false
+      event_coordinates: partial   # shot chart locations
+      snapshots: false
+      identity: true
+      outcomes: true
+      pose: false
+      footage: false
+      detection_flag: false
+    data_license: "NBA.com terms of use (restrictive; not an open data license)"
+    code_license: "MIT (client library only; does not license the data)"
+    attribution: "Game metadata / play-by-play: NBA.com stats, accessed via nba_api."
+    redistribution: "Not redistributed. Local research use only."
+    redistributable_demo: false
+    access_status: discovered_only
+    caveats:
+      - "Endpoints are frequently rate limited or blocked from cloud/VPN IPs."
+  skillcorner_bodypose:
+    publisher: SkillCorner
+    sport: soccer
+    priority: P2
+    url: https://huggingface.co/datasets/SkillCorner/opendata-bodypose
+    kind: optional
+    data_license: "see Hugging Face dataset card (not yet inspected)"
+    code_license: MIT
+    redistributable_demo: false
+    access_status: discovered_only
+    caveats: ["Large; optional pose experiments only. Not a core dependency."]
+  soccernet_gsr:
+    publisher: SoccerNet
+    sport: soccer
+    priority: P2
+    url: https://github.com/SoccerNet/sn-gamestate
+    kind: optional
+    data_license: "requires NDA/registration for videos (per SoccerNet); not inspected"
+    code_license: "see repository"
+    redistributable_demo: false
+    access_status: requires_registration
+    caveats: ["Video rights and GPU compute; excluded from the core platform."]
+  signality_hammarby:
+    publisher: "Signality (Uppsala course materials)"
+    sport: soccer
+    priority: P2
+    url: https://uppsala.instructure.com/courses/28112/pages/4-player-movements-on-the-pitch
+    kind: optional
+    data_license: unknown
+    redistributable_demo: false
+    access_status: discovered_only
+    caveats: ["Referenced by Metrica README; course-hosted, stability and terms unverified."]
+  lastrow_liverpool:
+    publisher: "Last Row / Friends of Tracking"
+    sport: soccer
+    priority: P2
+    url: https://github.com/Friends-of-Tracking-Data-FoTD/Last-Row
+    kind: optional
+    data_license: unknown
+    redistributable_demo: false
+    access_status: discovered_only
+    caveats: ["19 goal sequences; hand-derived tracking from video; not continuous full matches."]
+
+profiles:
+  sample:
+    byte_cap: 800_000_000
+    skillcorner: {matches: 2}
+    metrica: {games: ["Sample_Game_1"]}
+    sportvu: {games: 2}
+    statsbomb: {competitions: [[43, 106]], kinds: [events, lineups]}   # FIFA World Cup 2022, no 360
+    wyscout: {include: [events, matches, players, teams, competitions, eventid2name, tags2name]}
+  research:
+    byte_cap: 12_000_000_000
+    skillcorner: {matches: all}
+    metrica: {games: ["Sample_Game_1", "Sample_Game_2"]}
+    sportvu: {games: 60}
+    statsbomb: {competitions: [[43, 106], [55, 43], [55, 282], [72, 107], [53, 106]]}
+    wyscout: {include: [events, matches, players, teams, competitions, eventid2name, tags2name]}
+  full:
+    byte_cap: 60_000_000_000
+    skillcorner: {matches: all}
+    metrica: {games: ["Sample_Game_1", "Sample_Game_2", "Sample_Game_3"]}
+    sportvu: {games: all}
+    statsbomb: {competitions: all}
+    wyscout: {include: [events, matches, players, teams, competitions, eventid2name, tags2name]}

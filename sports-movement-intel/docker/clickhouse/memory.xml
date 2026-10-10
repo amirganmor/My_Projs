@@ -1,0 +1,21 @@
+<clickhouse>
+    <!-- Sized for a small Docker VM: the server limit follows the container cgroup (mem_limit). -->
+    <max_server_memory_usage>0</max_server_memory_usage>
+    <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
+    <mark_cache_size>67108864</mark_cache_size>
+    <index_mark_cache_size>0</index_mark_cache_size>
+    <uncompressed_cache_size>0</uncompressed_cache_size>
+    <query_cache><max_size_in_bytes>0</max_size_in_bytes></query_cache>
+    <logger><level>warning</level></logger>
+    <listen_host>0.0.0.0</listen_host>
+    <!-- query_log is kept for benchmarks; high-volume diagnostic logs are disabled. -->
+    <trace_log remove="1"/>
+    <metric_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <text_log remove="1"/>
+    <query_thread_log remove="1"/>
+    <processors_profile_log remove="1"/>
+    <latency_log remove="1"/>
+    <error_log remove="1"/>
+    <part_log remove="1"/>
+</clickhouse>

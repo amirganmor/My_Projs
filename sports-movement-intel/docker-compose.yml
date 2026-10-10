@@ -1,0 +1,298 @@
+# Sports Movement Intelligence Platform - the single Compose file for the whole platform.
+#   make up        -> default stack (lakehouse, Kafka, Spark streaming, ClickHouse, API/UI, replay)
+#   make airflow   -> profile "orchestration" (Airflow + Postgres; stop spark-stream first on 8 GB VMs)
+#   make up-ai     -> default stack + profile "ai" (MLflow server, Qdrant)
+# All ports bind to 127.0.0.1 only. Memory limits sum to ~7 GB to fit the measured Docker VM (7.65 GiB).
+name: smip
+
+x-smip-env: &smip-env
+  SMIP_DATA_DIR: /data
+  SMIP_CONFIG_DIR: /opt/smip/config
+  SMIP_KAFKA_BOOTSTRAP: kafka:9092
+  SMIP_CLICKHOUSE_HOST: clickhouse
+  SMIP_CLICKHOUSE_PORT: "8123"
+  SMIP_CLICKHOUSE_USER: ${SMIP_CLICKHOUSE_USER:-smip}
+  SMIP_CLICKHOUSE_PASSWORD: ${SMIP_CLICKHOUSE_PASSWORD:-smip-local}
+  SMIP_ICEBERG_REST_URI: http://iceberg-rest:8181
+  SMIP_S3_ENDPOINT: http://objectstore:7070
+  SMIP_S3_ACCESS_KEY: ${SMIP_S3_ACCESS_KEY:-smip}
+  SMIP_S3_SECRET_KEY: ${SMIP_S3_SECRET_KEY:-smip-local-secret}
+  SMIP_S3_REGION: us-east-1
+  SMIP_WAREHOUSE: s3://warehouse/
+  SMIP_OLLAMA_URL: ${SMIP_OLLAMA_URL:-http://host.docker.internal:11434}
+  SMIP_OLLAMA_MODEL: ${SMIP_OLLAMA_MODEL:-qwen2.5:7b-instruct}
+  SMIP_MLFLOW_URI: ${SMIP_MLFLOW_URI:-file:///data/mlruns}
+  SMIP_QDRANT_URL: http://qdrant:6333
+  AWS_ACCESS_KEY_ID: ${SMIP_S3_ACCESS_KEY:-smip}
+  AWS_SECRET_ACCESS_KEY: ${SMIP_S3_SECRET_KEY:-smip-local-secret}
+  AWS_REGION: us-east-1
+  MLFLOW_DISABLE_AGENT_HINT: "1"
+  SMIP_PUBLIC_DEMO: ${SMIP_PUBLIC_DEMO:-0}
+
+services:
+  # ------------------------------------------------------------------ storage
+  objectstore:
+    image: versity/versitygw:v1.8.0
+    command: >-
+      --access ${SMIP_S3_ACCESS_KEY:-smip} --secret ${SMIP_S3_SECRET_KEY:-smip-local-secret}
+      --port :7070 --webui :7071 --webui-no-tls --webui-gateways http://127.0.0.1:17070 --quiet
+      posix --sidecar /meta /data
+    volumes:
+      - ./lakehouse/data:/data          # Iceberg files are plain files under ./lakehouse/data/warehouse
+      - ./lakehouse/.meta:/meta
+    ports:
+      - "127.0.0.1:17070:7070"
+      - "127.0.0.1:17071:7071"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 7070"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+    restart: unless-stopped
+
+  iceberg-rest:
+    image: apache/iceberg-rest-fixture:1.10.1
+    environment:
+      CATALOG_WAREHOUSE: s3://warehouse/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://objectstore:7070
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      CATALOG_URI: jdbc:sqlite:file:/catalog/iceberg_catalog.db
+      CATALOG_JDBC_USER: iceberg
+      CATALOG_JDBC_PASSWORD: iceberg
+      AWS_ACCESS_KEY_ID: ${SMIP_S3_ACCESS_KEY:-smip}
+      AWS_SECRET_ACCESS_KEY: ${SMIP_S3_SECRET_KEY:-smip-local-secret}
+      AWS_REGION: us-east-1
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    volumes:
+      - ./lakehouse/catalog:/catalog
+    ports:
+      - "127.0.0.1:18181:8181"
+    depends_on:
+      objectstore: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8181/v1/config >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- streaming
+  kafka:
+    image: apache/kafka:4.3.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw   # base64 UUID required by KRaft storage format
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://127.0.0.1:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_MESSAGE_MAX_BYTES: 4194304
+      KAFKA_HEAP_OPTS: -Xms384m -Xmx384m
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    ports:
+      - "127.0.0.1:19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    mem_limit: 900m
+    restart: unless-stopped
+
+  kafka-init:
+    image: apache/kafka:4.3.1
+    depends_on:
+      kafka: {condition: service_healthy}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        B=kafka:9092; K=/opt/kafka/bin/kafka-topics.sh
+        $$K --bootstrap-server $$B --create --if-not-exists --topic smip.tracking.v1 --partitions 6 --replication-factor 1 --config retention.ms=604800000 --config max.message.bytes=4194304
+        $$K --bootstrap-server $$B --create --if-not-exists --topic smip.events.v1 --partitions 6 --replication-factor 1
+        $$K --bootstrap-server $$B --create --if-not-exists --topic smip.control.v1 --partitions 1 --replication-factor 1
+        $$K --bootstrap-server $$B --create --if-not-exists --topic smip.inference.v1 --partitions 3 --replication-factor 1
+        $$K --bootstrap-server $$B --create --if-not-exists --topic smip.quarantine.v1 --partitions 1 --replication-factor 1
+        $$K --bootstrap-server $$B --list
+    restart: "no"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8.33.6
+    environment:
+      CLICKHOUSE_DB: smip
+      CLICKHOUSE_USER: ${SMIP_CLICKHOUSE_USER:-smip}
+      CLICKHOUSE_PASSWORD: ${SMIP_CLICKHOUSE_PASSWORD:-smip-local}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./sql/clickhouse:/docker-entrypoint-initdb.d:ro
+      - ./docker/clickhouse/memory.xml:/etc/clickhouse-server/config.d/memory.xml:ro
+    ports:
+      - "127.0.0.1:18123:8123"
+    ulimits:
+      nofile: {soft: 262144, hard: 262144}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping | grep -q Ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 1800m
+    restart: unless-stopped
+
+  spark-stream:
+    build: {context: ., dockerfile: docker/spark/Dockerfile}
+    image: smip-spark:0.1.0
+    environment:
+      <<: *smip-env
+      SMIP_SPARK_CHECKPOINT_DIR: /data/spark/checkpoints
+      SMIP_TRIGGER_SECONDS: ${SMIP_TRIGGER_SECONDS:-2}
+      SMIP_MAX_OFFSETS: ${SMIP_MAX_OFFSETS:-2500}
+    command:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - local[3]
+      - --driver-memory
+      - 1400m
+      - --conf
+      - spark.sql.shuffle.partitions=6
+      - --conf
+      - spark.ui.port=4040
+      - /opt/smip/smip/spark/stream_job.py
+    volumes:
+      - ./smip:/opt/smip/smip:ro          # code is mounted so changes apply on restart
+      - ./config:/opt/smip/config:ro
+      - ./data/normalized:/data/normalized:ro
+      - ./data/spark:/data/spark
+    ports:
+      - "127.0.0.1:14040:4040"
+    depends_on:
+      kafka-init: {condition: service_completed_successfully}
+      iceberg-rest: {condition: service_healthy}
+      clickhouse: {condition: service_healthy}
+    mem_limit: 2300m
+    restart: unless-stopped
+
+  # ------------------------------------------------------------- app services
+  api:
+    build: {context: ., dockerfile: docker/app/Dockerfile}
+    image: smip-app:0.1.0
+    environment: *smip-env
+    command: ["uvicorn", "smip.serving.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - ./smip:/opt/smip/smip:ro
+      - ./config:/opt/smip/config:ro
+      - ./frontend/dist:/opt/smip/frontend/dist:ro
+      - ./data:/data
+    ports:
+      - "127.0.0.1:18000:8000"
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      clickhouse: {condition: service_healthy}
+      kafka-init: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 700m
+    restart: unless-stopped
+
+  replay:
+    image: smip-app:0.1.0
+    environment: *smip-env
+    command: ["smip", "replay", "serve"]
+    volumes:
+      - ./smip:/opt/smip/smip:ro
+      - ./config:/opt/smip/config:ro
+      - ./data:/data
+    depends_on:
+      api: {condition: service_started}
+      kafka-init: {condition: service_completed_successfully}
+    mem_limit: 500m
+    restart: unless-stopped
+
+  # ------------------------------------------------------------ orchestration
+  # Off by default (profile "orchestration"): the full stack plus Airflow exceeds an 8 GB Docker VM.
+  airflow-db:
+    profiles: ["orchestration"]
+    image: postgres:16.15-alpine
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow-local}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+    restart: unless-stopped
+
+  airflow:
+    profiles: ["orchestration"]
+    build: {context: ., dockerfile: docker/airflow/Dockerfile}
+    image: smip-airflow:0.1.0
+    environment:
+      <<: *smip-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__PARALLELISM: "2"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/smip/dags
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD:-airflow-local}@airflow-db:5432/airflow
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"   # local-only UI (bound to 127.0.0.1)
+      AIRFLOW__API__PORT: "8080"
+    command: ["airflow", "standalone"]
+    volumes:
+      - ./data:/data
+      - ./dags:/opt/smip/dags:ro
+      - ./smip:/opt/smip/smip:ro
+    ports:
+      - "127.0.0.1:18080:8080"
+    depends_on:
+      airflow-db: {condition: service_healthy}
+    mem_limit: 1600m
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- AI profile
+  mlflow:
+    profiles: ["ai"]
+    image: smip-app:0.1.0
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000",
+              "--backend-store-uri", "sqlite:////data/mlflow/mlflow.db",
+              "--artifacts-destination", "/data/mlflow/artifacts"]
+    environment: *smip-env
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:15000:5000"
+    mem_limit: 700m
+
+  qdrant:
+    profiles: ["ai"]
+    image: qdrant/qdrant:v1.19.1
+    volumes:
+      - qdrant-data:/qdrant/storage
+    ports:
+      - "127.0.0.1:16333:6333"
+    mem_limit: 512m
+
+volumes:
+  kafka-data:
+  clickhouse-data:
+  airflow-db:
+  qdrant-data:

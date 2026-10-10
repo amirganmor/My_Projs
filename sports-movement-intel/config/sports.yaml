@@ -1,0 +1,28 @@
+# Sport-specific, versioned feature configuration used by the shared engine (batch and stream).
+# Thresholds are conventions, not physiological truths. Change -> bump feature_version.
+soccer:
+  feature_version: "soccer-1.0.0"
+  reorder_window_frames: 20        # frames held before release (2 s at 10 fps)
+  max_gap_ms: 500                  # larger gaps break a trajectory segment (no distance across)
+  max_speed_mps: {player: 12.5, ball: 45.0}
+  ema_alpha: 0.5                   # causal EMA on positions for online speed
+  hi_speed_mps: 5.5                # 19.8 km/h, common "high-speed running" convention
+  sprint_speed_mps: 7.0            # 25.2 km/h
+  accel_threshold_mps2: 3.0
+  window_ms: 60000                 # tactical/workload windows on physical game time
+  grid: {nx: 21, ny: 13}           # heatmap cells over attack-normalized pitch
+  min_outfield_for_shape: 8
+  inactivity_timeout_ms: 120000    # processing-time timeout that finalizes an idle match state
+basketball:
+  feature_version: "basketball-1.0.0"
+  reorder_window_frames: 50        # 2 s at 25 Hz
+  max_gap_ms: 200
+  max_speed_mps: {player: 10.5, ball: 30.0}
+  ema_alpha: 0.35
+  hi_speed_mps: 4.5
+  sprint_speed_mps: 6.0
+  accel_threshold_mps2: 3.0
+  window_ms: 60000
+  grid: {nx: 19, ny: 10}           # ~1.5 m cells over 28.65 x 15.24 m
+  min_outfield_for_shape: 5
+  inactivity_timeout_ms: 120000

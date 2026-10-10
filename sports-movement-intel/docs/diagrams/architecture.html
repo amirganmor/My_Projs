@@ -1,0 +1,225 @@
+<!doctype html>
+<!-- Source for docs/img/architecture.png. Render with: make diagram -->
+<html>
+<head>
+<meta charset="utf-8" />
+<title>SMIP architecture</title>
+<style>
+  :root {
+    --bg: #070b14; --panel: #0e1526; --panel2: #121b30; --line: #1e2a44; --text: #e6ecf7; --muted: #8190ab;
+    --blue: #38bdf8; --rose: #fb7185; --green: #34d399; --amber: #fbbf24; --violet: #a78bfa; --orange: #fb923c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "SF Pro Text", "Segoe UI", Inter, Helvetica, Arial, sans-serif; }
+  #canvas { position: relative; width: 1900px; padding: 34px 38px 30px; background:
+    radial-gradient(1200px 500px at 15% -10%, rgba(56, 189, 248, 0.10), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(167, 139, 250, 0.10), transparent 60%), var(--bg); }
+  header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 26px; }
+  h1 { font-size: 30px; letter-spacing: -0.02em; }
+  h1 span { color: var(--blue); }
+  .sub { color: var(--muted); font-size: 15px; margin-top: 6px; }
+  .badge { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; color: var(--rose); border: 1px solid rgba(251,113,133,.45);
+    background: rgba(251,113,133,.08); padding: 7px 12px; border-radius: 999px; }
+  .grid { position: relative; display: grid; grid-template-columns: 236px 244px 250px 280px 296px 270px; column-gap: 48px; z-index: 1; }
+  .col h2 { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px 2px; font-weight: 700; }
+  .col h2 b { color: var(--text); }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+  .box { position: relative; background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line);
+    border-radius: 14px; padding: 13px 15px 12px; box-shadow: 0 12px 30px rgba(0,0,0,.35); }
+  .box::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--accent, var(--blue)); }
+  .box .t { font-size: 15.5px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .box .d { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+  .box .d code, .mono { font-family: "SF Mono", "JetBrains Mono", Menlo, monospace; font-size: 11.5px; color: #c7d2e6; }
+  .tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 2px 7px; border-radius: 999px; text-transform: uppercase; }
+  .tag.pub { color: var(--green); background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.35); }
+  .tag.loc { color: var(--amber); background: rgba(251,191,36,.10); border: 1px solid rgba(251,191,36,.35); }
+  .tag.opt { color: var(--violet); background: rgba(167,139,250,.10); border: 1px solid rgba(167,139,250,.35); }
+  .tables { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 8px; }
+  .tables div { font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; color: #c7d2e6; background: rgba(255,255,255,.03);
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+  .tables div b { color: var(--accent); font-weight: 700; }
+  .lower { position: relative; z-index: 1; display: grid; grid-template-columns: 528px 640px 1fr; gap: 48px; margin-top: 44px; }
+  .guar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-top: 6px; }
+  .guar div { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+  .guar b { color: var(--text); }
+  footer { position: relative; z-index: 1; margin-top: 28px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .chip { font-size: 12px; color: var(--muted); border: 1px solid var(--line); background: var(--panel); padding: 6px 10px; border-radius: 8px; }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip i { font-style: normal; color: var(--blue); font-family: "SF Mono", Menlo, monospace; font-size: 11px; margin-left: 4px; }
+  svg#wires { position: absolute; inset: 0; z-index: 0; overflow: visible; pointer-events: none; }
+  .legend { display: flex; gap: 18px; font-size: 12px; color: var(--muted); align-items: center; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <svg id="wires"></svg>
+  <header>
+    <div>
+      <h1>Sports Movement Intelligence <span>Platform</span></h1>
+      <div class="sub">Historical player-tracking replays through a streaming lakehouse · one <code class="mono">docker compose</code> on a laptop</div>
+    </div>
+    <div style="display:flex; gap:22px; align-items:center">
+      <div class="legend">
+        <span><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" stroke="#38bdf8" stroke-width="2.4"/></svg>data flow</span>
+        <span><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5 5"/></svg>verification / control</span>
+      </div>
+      <div class="badge">● HISTORICAL MATCH REPLAY · NO LIVE FEED</div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <h2><b>1</b> · Public sources</h2>
+      <div class="stack">
+        <div class="box" id="sc" style="--accent: var(--green)"><div class="t">SkillCorner <span class="tag pub">public</span></div>
+          <div class="d">A-League 2024/25 · 10 Hz tracking · MIT · pinned commit</div></div>
+        <div class="box" id="me" style="--accent: var(--amber)"><div class="t">Metrica <span class="tag loc">local</span></div>
+          <div class="d">Sample games · 25 Hz · anonymized players</div></div>
+        <div class="box" id="sv" style="--accent: var(--amber)"><div class="t">NBA SportVU <span class="tag loc">local</span></div>
+          <div class="d">2015–16 · 25 Hz · 636 archived games</div></div>
+        <div class="box" id="pbp" style="--accent: var(--amber)"><div class="t">NBA play-by-play <span class="tag loc">local</span></div>
+          <div class="d">Archived NBA.com events · running score</div></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2><b>2</b> · Acquire &amp; normalize</h2>
+      <div class="stack">
+        <div class="box" id="dl"><div class="t">Download</div>
+          <div class="d">Resumable · sha256 per asset · safe zip/7z extraction · byte budgets</div></div>
+        <div class="box" id="ad"><div class="t">Adapters</div>
+          <div class="d">One canonical contract: metres, centre origin, attack-normalized copy<br/><code>data/normalized/&lt;src&gt;/&lt;match&gt;</code></div></div>
+        <div class="box" id="cat"><div class="t">Catalog &amp; licenses</div>
+          <div class="d"><code>manifest.lock.json</code> · <code>DATA_SOURCES.md</code> · public-demo flags</div></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2><b>3</b> · Replay → Kafka</h2>
+      <div class="stack">
+        <div class="box" id="rp" style="--accent: var(--orange)"><div class="t">Replay service</div>
+          <div class="d">Deterministic · 0.5–100× · pause / speed / seek<br/>Seeded faults: duplicates, delays, out-of-order, corrections, malformed</div></div>
+        <div class="box" id="kf" style="--accent: var(--orange)"><div class="t">Kafka 4.3 · KRaft</div>
+          <div class="d"><code>smip.tracking.v1</code> key = session|match<br/><code>smip.control.v1</code> · <code>smip.quarantine.v1</code><br/>Idempotent producer · acks=all</div></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2><b>4</b> · Spark 4.1 streaming</h2>
+      <div class="stack">
+        <div class="box" id="bz" style="--accent: var(--violet)"><div class="t">Bronze query</div>
+          <div class="d">Parse · validate envelope · quarantine bad records (attributed by Kafka key)</div></div>
+        <div class="box" id="en" style="--accent: var(--violet)"><div class="t">Engine query</div>
+          <div class="d"><code>applyInPandasWithState</code> per (session, match)<br/>Reorder buffer 2 s · dedup · corrections<br/>Kinematics · 60 s windows · team shape · heatmaps</div></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2><b>5</b> · Lakehouse &amp; serving store</h2>
+      <div class="stack">
+        <div class="box" id="ice" style="--accent: var(--blue)"><div class="t">Apache Iceberg 1.11</div>
+          <div class="d">REST catalog · S3 gateway · files in <code>./lakehouse</code><br/>Commit tag <code>smip.commit=query:batch</code></div>
+          <div class="tables">
+            <div><b>bronze</b> kafka_tracking_raw</div><div><b>silver</b> frames · positions</div>
+            <div><b>gold</b> player / team windows</div><div><b>ops</b> quarantine · stats</div>
+          </div></div>
+        <div class="box" id="ch" style="--accent: var(--blue)"><div class="t">ClickHouse 25.8</div>
+          <div class="d">ReplacingMergeTree · <code>FINAL</code> reads · sink ledger per micro-batch</div></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2><b>6</b> · API, intelligence &amp; UI</h2>
+      <div class="stack">
+        <div class="box" id="api" style="--accent: var(--green)"><div class="t">FastAPI</div>
+          <div class="d">Frames · metrics · heatmaps · lineage · public-demo guard</div></div>
+        <div class="box" id="ml" style="--accent: var(--green)"><div class="t">Light ML</div>
+          <div class="d">Similar moments (kNN, 1.48× lift) · shape changes (PELT)</div></div>
+        <div class="box" id="an" style="--accent: var(--green)"><div class="t">Grounded analyst</div>
+          <div class="d">5 typed read-only tools · evidence ids · refusals · no LLM</div></div>
+        <div class="box" id="ui" style="--accent: var(--rose)"><div class="t">React dashboard</div>
+          <div class="d">Live stage · players · pipeline · catalog</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="box" id="batch" style="--accent: var(--violet)"><div class="t">Batch engine · same <code class="mono">FeatureEngine</code></div>
+      <div class="d">Runs the identical engine over the normalized parquet, with no Kafka and no Spark.
+        <b style="color:var(--text)">Parity check</b>: stream and batch final windows are compared row by row, with 0 differences on every demo session.</div></div>
+    <div class="box" id="guar" style="--accent: var(--amber)"><div class="t">Delivery guarantees</div>
+      <div class="guar">
+        <div><b>Kafka</b>: at-least-once, ordered per key</div>
+        <div><b>Iceberg</b>: batch commit tag skips retries</div>
+        <div><b>ClickHouse</b>: idempotent by natural key</div>
+        <div><b>Result</b>: effectively-once per session, not a global exactly-once claim</div>
+      </div></div>
+    <div class="box" id="af" style="--accent: var(--violet)"><div class="t">Airflow <span class="tag opt">optional profile</span></div>
+      <div class="d"><code>smip_data</code>: download → normalize → catalog<br/><code>smip_quality</code>: parity + lineage</div></div>
+  </div>
+
+  <footer>
+    <span class="chip"><b>7 containers</b> · all ports on 127.0.0.1</span>
+    <span class="chip"><b>spark-stream</b><i>2.3 GB</i></span>
+    <span class="chip"><b>clickhouse</b><i>1.8 GB</i></span>
+    <span class="chip"><b>kafka</b><i>0.9 GB</i></span>
+    <span class="chip"><b>api</b><i>0.7 GB</i></span>
+    <span class="chip"><b>iceberg-rest</b><i>0.5 GB</i></span>
+    <span class="chip"><b>replay</b><i>0.5 GB</i></span>
+    <span class="chip"><b>objectstore</b><i>0.25 GB</i></span>
+    <span class="chip">fits a <b>7.65 GiB</b> Docker VM · no paid APIs or cloud services</span>
+  </footer>
+</div>
+
+<script>
+  // [from, to, kind, fromSide, toSide]; sides: r l t b (auto if omitted)
+  const EDGES = [
+    ["sc", "dl"], ["me", "dl"], ["sv", "dl"], ["pbp", "dl"],
+    ["dl", "ad", "flow", "b", "t"], ["ad", "cat", "flow", "b", "t"],
+    ["ad", "rp"], ["rp", "kf", "flow", "b", "t"],
+    ["kf", "bz"], ["kf", "en"],
+    ["bz", "ice"], ["bz", "ch"], ["en", "ice"], ["en", "ch"],
+    ["ch", "api"], ["ice", "api", "ctl"],
+    ["api", "ml", "flow", "b", "t"], ["ml", "an", "flow", "b", "t"], ["an", "ui", "flow", "b", "t"],
+    ["cat", "batch", "ctl", "b", "t"], ["batch", "ch", "ctl", "r", "b"],
+  ];
+  const svg = document.getElementById("wires");
+  const root = document.getElementById("canvas").getBoundingClientRect();
+  const NS = "http://www.w3.org/2000/svg";
+  const defs = document.createElementNS(NS, "defs");
+  defs.innerHTML = `
+    <marker id="a-flow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#38bdf8"/></marker>
+    <marker id="a-ctl" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#a78bfa"/></marker>
+    <linearGradient id="g-flow" x1="0" x2="1"><stop offset="0" stop-color="#38bdf8" stop-opacity=".35"/><stop offset="1" stop-color="#38bdf8"/></linearGradient>`;
+  svg.appendChild(defs);
+  const pt = (el, side) => {
+    const b = el.getBoundingClientRect(), x = b.left - root.left, y = b.top - root.top;
+    return { r: [x + b.width, y + b.height / 2], l: [x, y + b.height / 2], t: [x + b.width / 2, y], b: [x + b.width / 2, y + b.height] }[side];
+  };
+  for (const [f, t, kind = "flow", fs, ts] of EDGES) {
+    const a = document.getElementById(f), b = document.getElementById(t);
+    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    const fromSide = fs || (rb.left > ra.right ? "r" : rb.right < ra.left ? "l" : rb.top > ra.bottom ? "b" : "t");
+    const toSide = ts || (fromSide === "r" ? "l" : fromSide === "l" ? "r" : fromSide === "b" ? "t" : "b");
+    const [x1, y1] = pt(a, fromSide), [x2, y2] = pt(b, toSide);
+    const k = Math.max(30, Math.min(120, Math.abs((fromSide === "r" || fromSide === "l") ? x2 - x1 : y2 - y1) * 0.5));
+    const d = { r: [k, 0], l: [-k, 0], b: [0, k], t: [0, -k] };
+    const back = { r: [-k, 0], l: [k, 0], t: [0, -k], b: [0, k] };
+    const [c1x, c1y] = [x1 + d[fromSide][0], y1 + d[fromSide][1]];
+    const [c2x, c2y] = [x2 + back[toSide][0], y2 + back[toSide][1]];
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`);
+    p.setAttribute("fill", "none");
+    p.setAttribute("stroke", kind === "ctl" ? "#a78bfa" : "#38bdf8");
+    p.setAttribute("stroke-width", kind === "ctl" ? "2" : "2.4");
+    p.setAttribute("stroke-opacity", kind === "ctl" ? ".8" : ".85");
+    if (kind === "ctl") p.setAttribute("stroke-dasharray", "6 6");
+    p.setAttribute("marker-end", `url(#a-${kind})`);
+    svg.appendChild(p);
+  }
+  svg.setAttribute("width", root.width); svg.setAttribute("height", root.height);
+  window.__ready = true;
+</script>
+</body>
+</html>

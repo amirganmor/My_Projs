@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AmirBuildsData — SMIP Architecture, live replay flow</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+<style>
+  :root {
+    --bg: #060911;
+    --card: rgba(15, 23, 42, 0.78);
+    --line: rgba(255, 255, 255, 0.09);
+    --text: #f8fafc;
+    --muted: #94a3b8;
+    --dim: #64748b;
+    --blue: #38bdf8;
+    --violet: #c084fc;
+    --green: #34d399;
+    --orange: #fb923c;
+    --red: #f87171;
+    --yellow: #facc15;
+    --cyan: #22d3ee;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); overflow-x: hidden;
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+
+  #bg { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; opacity: 0.55; }
+  .glow { position: fixed; z-index: 0; pointer-events: none; border-radius: 50%; filter: blur(60px); }
+  .glow.a { top: 6%; right: 4%; width: 460px; height: 460px; background: radial-gradient(circle, rgba(192,132,252,.14), transparent 70%); }
+  .glow.b { bottom: 4%; left: 4%; width: 520px; height: 520px; background: radial-gradient(circle, rgba(52,211,153,.11), transparent 70%); }
+
+  .wrap { position: relative; z-index: 1; max-width: 1520px; margin: 0 auto; padding: 24px; }
+
+  header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px;
+    padding-bottom: 16px; border-bottom: 1px solid var(--line);
+    background: radial-gradient(circle at top left, rgba(56,189,248,.12), transparent 45%); }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .logo { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 22px;
+    background: linear-gradient(135deg, var(--blue), var(--violet)); box-shadow: 0 0 25px rgba(56,189,248,.4); }
+  h1 { font-size: 24px; font-weight: 750; letter-spacing: -.5px;
+    background: linear-gradient(to right, #fff, #94a3b8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .brand p { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+  .head-right { display: flex; align-items: center; gap: 12px; }
+  .pill { font-size: 12px; font-weight: 700; letter-spacing: .4px; padding: 7px 12px; border-radius: 999px;
+    color: var(--red); border: 1px solid rgba(248,113,113,.4); background: rgba(248,113,113,.08); white-space: nowrap; }
+  .yt { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; text-decoration: none; padding: 10px 18px;
+    border-radius: 8px; font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 4px 16px rgba(239,68,68,.35); transition: transform .2s, box-shadow .2s; white-space: nowrap; }
+  .yt:hover { transform: translateY(-2px); box-shadow: 0 6px 22px rgba(239,68,68,.55); }
+
+  /* controls */
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .ctl-group { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--line); }
+  .ctl-label { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--dim); padding: 0 6px; }
+  button { font: inherit; font-size: 13px; font-weight: 650; color: var(--muted); background: transparent; cursor: pointer;
+    border: 1px solid transparent; border-radius: 7px; padding: 6px 11px; transition: all .15s; display: inline-flex; align-items: center; gap: 7px; }
+  button:hover { color: var(--text); background: rgba(255,255,255,.05); }
+  button.on { color: var(--blue); border-color: rgba(56,189,248,.4); background: rgba(56,189,248,.1); }
+  button.fault.on { color: var(--red); border-color: rgba(248,113,113,.45); background: rgba(248,113,113,.1); }
+  .counters { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+  .counter { padding: 7px 12px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .counter b { color: var(--text); font-variant-numeric: tabular-nums; margin-left: 6px; }
+  .counter .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+
+  /* stage */
+  .stage-shell { position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+    background: rgba(11,17,32,.42); backdrop-filter: blur(1.5px);
+    box-shadow: 0 30px 60px -12px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.08); }
+  #stage { position: absolute; left: 0; top: 0; width: 1440px; height: 720px; transform-origin: 0 0; }
+  #stage svg { position: absolute; inset: 0; width: 1440px; height: 720px; overflow: visible; }
+
+  .col-head { position: absolute; top: 22px; font-size: 11.5px; font-weight: 800; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--blue); }
+  .col-head b { color: var(--dim); margin-right: 6px; }
+  .col-bg { position: absolute; top: 12px; border-radius: 14px; background: rgba(15,23,42,.22); border: 1px solid rgba(255,255,255,.06); }
+
+  .node { position: absolute; border-radius: 12px; padding: 10px 12px 10px 12px; cursor: pointer;
+    background: rgba(15,23,42,.92); border: 1.6px solid var(--line); border-left: 3px solid var(--accent, var(--blue));
+    transition: border-color .2s, background .2s, box-shadow .2s, transform .2s; }
+  .node:hover, .node.sel { background: rgba(30,41,59,.96); border-color: var(--accent, var(--blue));
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent, var(--blue)) 45%, transparent); }
+  .node.sel { transform: translateY(-1px); }
+  .node.pulse { animation: pulse .45s ease-out; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); }
+                     100% { box-shadow: 0 0 0 10px transparent; } }
+  .node .row { display: flex; align-items: center; gap: 10px; }
+  .node .ic { width: 30px; height: 30px; border-radius: 50%; background: #1e293b; display: grid; place-items: center;
+    color: var(--accent, var(--blue)); font-size: 13px; flex: none; }
+  .node .t { font-size: 14px; font-weight: 720; line-height: 1.2; }
+  .node .s { font-size: 11.5px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+  .node .tag { display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: .6px; padding: 2px 6px; border-radius: 5px;
+    margin-left: 6px; vertical-align: 1px; }
+  .tag.pub { color: var(--green); background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.3); }
+  .tag.loc { color: var(--yellow); background: rgba(250,204,21,.1); border: 1px solid rgba(250,204,21,.3); }
+  .tag.opt { color: var(--violet); background: rgba(192,132,252,.12); border: 1px solid rgba(192,132,252,.3); }
+  .tables { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 8px; }
+  .tables div { font-size: 10px; color: var(--muted); padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.05); line-height: 1.3; }
+  .tables b { display: block; font-size: 10px; letter-spacing: .5px; }
+  .badge-ok { position: absolute; right: 10px; top: 10px; font-size: 10px; font-weight: 800; letter-spacing: .6px; color: var(--green);
+    padding: 2px 7px; border-radius: 5px; background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.35); }
+
+  .edge { fill: none; stroke: #2a3a52; stroke-width: 2.2; stroke-dasharray: 6 6; animation: dash 30s linear infinite; }
+  .edge.acq { stroke: #243146; stroke-dasharray: 3 6; }
+  .edge.ctl { stroke: rgba(192,132,252,.45); stroke-dasharray: 4 5; }
+  .edge.hot { stroke: var(--blue); stroke-opacity: .85; }
+  .edge.ctl.hot { stroke: var(--violet); }
+  .edge.link { stroke: #2a3a52; stroke-dasharray: none; stroke-width: 1.6; animation: none; }
+  @keyframes dash { to { stroke-dashoffset: -1000; } }
+  .edge-label { font-size: 10.5px; fill: var(--dim); font-weight: 600; letter-spacing: .3px; }
+  .burst { pointer-events: none; }
+
+  /* info grid */
+  .grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 20px; margin-top: 20px; }
+  .card { background: var(--card); backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: 14px;
+    padding: 22px; box-shadow: 0 10px 30px -5px rgba(0,0,0,.4); }
+  .card-h { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .card-h i { font-size: 18px; color: var(--blue); }
+  .card-h h3 { font-size: 16.5px; font-weight: 720; }
+  .card-h span { margin-left: auto; font-size: 11px; color: var(--dim); }
+  #inspector { font-size: 14px; line-height: 1.7; color: var(--muted); min-height: 210px; }
+  #inspector strong { color: var(--text); }
+  #inspector ul { margin: 6px 0 0 18px; }
+  #inspector li { margin: 2px 0; }
+  .ins-t { font-size: 19px; font-weight: 720; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; color: var(--accent, var(--blue)); }
+  .ins-empty { text-align: center; padding: 30px 0; color: var(--muted); }
+  .ins-empty i { font-size: 26px; display: block; margin-bottom: 12px; color: var(--blue); }
+  .measured { font-size: 10px; font-weight: 800; letter-spacing: .6px; color: var(--green); border: 1px solid rgba(52,211,153,.35);
+    background: rgba(52,211,153,.1); padding: 1px 6px; border-radius: 5px; margin-left: 4px; vertical-align: 1px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  tr:hover td { background: rgba(255,255,255,.03); }
+  td i { width: 20px; text-align: center; margin-right: 8px; color: var(--blue); }
+  td.mem { color: var(--cyan); font-variant-numeric: tabular-nums; }
+  .note { font-size: 11.5px; color: var(--dim); margin-top: 12px; line-height: 1.5; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .legend .ln { width: 22px; border-top: 2px dashed #3b4b63; }
+  .legend .ln.v { border-top-color: var(--violet); }
+
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } .counters { margin-left: 0; } }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="glow a"></div><div class="glow b"></div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo"><i class="fa-solid fa-cubes-stacked"></i></div>
+      <div>
+        <h1>Sports Movement Intelligence Platform</h1>
+        <p>Public tracking data → Kafka → Spark Structured Streaming → Iceberg + ClickHouse → FastAPI → React · one <code>docker compose</code> on a laptop</p>
+      </div>
+    </div>
+    <div class="head-right">
+      <span class="pill"><i class="fa-solid fa-clock-rotate-left"></i>&nbsp; HISTORICAL MATCH REPLAY · NO LIVE FEED</span>
+      <a class="yt" href="https://www.youtube.com/@AmirBuildsData" target="_blank" rel="noopener"><i class="fa-brands fa-youtube"></i> AmirBuildsData</a>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="ctl-group">
+      <span class="ctl-label">Replay</span>
+      <button id="play" class="on"><i class="fa-solid fa-pause"></i><span>Pause</span></button>
+    </div>
+    <div class="ctl-group" id="speeds">
+      <span class="ctl-label">Speed</span>
+      <button data-speed="1">1×</button>
+      <button data-speed="5">5×</button>
+      <button data-speed="20" class="on">20×</button>
+      <button data-speed="100">100×</button>
+    </div>
+    <div class="ctl-group">
+      <span class="ctl-label">Faults</span>
+      <button id="faults" class="fault"><i class="fa-solid fa-bug"></i><span>Inject faults</span></button>
+    </div>
+    <div class="counters">
+      <div class="counter"><span class="dot" style="background:var(--blue)"></span>frames<b id="c-frames">0</b></div>
+      <div class="counter"><span class="dot" style="background:var(--yellow)"></span>duplicates dropped<b id="c-dup">0</b></div>
+      <div class="counter"><span class="dot" style="background:var(--green)"></span>corrections applied<b id="c-cor">0</b></div>
+      <div class="counter"><span class="dot" style="background:var(--red)"></span>quarantined<b id="c-q">0</b></div>
+    </div>
+  </div>
+
+  <div class="stage-shell" id="shell">
+    <div id="stage">
+      <svg id="svg" viewBox="0 0 1440 720">
+        <defs>
+          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" fill="#3b4b63"/>
+          </marker>
+          <marker id="arrow-v" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" fill="#a78bfa"/>
+          </marker>
+        </defs>
+        <g opacity="0.13" stroke="#38bdf8" fill="none" stroke-width="1.4">
+          <rect x="12" y="12" width="1416" height="696" rx="12"/>
+          <line x1="720" y1="12" x2="720" y2="708" stroke-dasharray="4 5"/>
+          <circle cx="720" cy="360" r="88"/>
+          <circle cx="720" cy="360" r="3" fill="#38bdf8"/>
+          <rect x="12" y="215" width="120" height="290"/><rect x="12" y="290" width="44" height="140"/>
+          <rect x="1308" y="215" width="120" height="290"/><rect x="1384" y="290" width="44" height="140"/>
+        </g>
+        <g id="edges"></g>
+        <g id="packets"></g>
+        <g id="fx"></g>
+      </svg>
+      <div id="nodes"></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--blue)"></i>SkillCorner frame</span>
+    <span><i class="dot" style="background:var(--orange)"></i>NBA SportVU frame</span>
+    <span><i class="dot" style="background:var(--green)"></i>Metrica frame / correction</span>
+    <span><i class="dot" style="background:var(--yellow)"></i>duplicate</span>
+    <span><i class="dot" style="background:var(--red)"></i>malformed record</span>
+    <span><i class="dot" style="background:var(--violet)"></i>control / verification</span>
+    <span><i class="ln"></i>data flow</span>
+    <span><i class="ln v"></i>control / parity</span>
+    <span style="margin-left:auto;color:var(--dim)">Animation is a visual simulation; counters are not measurements. Measured numbers are marked <span class="measured">MEASURED</span>.</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-h"><i class="fa-solid fa-microchip"></i><h3>Component inspector</h3><span>click any box</span></div>
+      <div id="inspector">
+        <div class="ins-empty"><i class="fa-solid fa-hand-pointer"></i>
+          Click a service in the diagram to see what it does, its guarantees, and the numbers measured for it.
+          Turn on <b>Inject faults</b> to watch duplicates get dropped and malformed records go to quarantine.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><i class="fa-solid fa-network-wired"></i><h3>Container service map</h3><span>all ports on 127.0.0.1</span></div>
+      <table>
+        <thead><tr><th>Service</th><th>Port</th><th>Memory <span class="measured">MEASURED</span></th></tr></thead>
+        <tbody>
+          <tr><td><i class="fa-brands fa-python"></i>API + dashboard</td><td><code>18000</code></td><td class="mem">0.7 GB</td></tr>
+          <tr><td><i class="fa-solid fa-bolt"></i>Spark driver UI</td><td><code>14040</code></td><td class="mem">2.3 GB</td></tr>
+          <tr><td><i class="fa-solid fa-database"></i>ClickHouse HTTP</td><td><code>18123</code></td><td class="mem">1.8 GB</td></tr>
+          <tr><td><i class="fa-solid fa-diagram-project"></i>Kafka (KRaft)</td><td><code>19092</code></td><td class="mem">0.9 GB</td></tr>
+          <tr><td><i class="fa-solid fa-snowflake"></i>Iceberg REST catalog</td><td><code>18181</code></td><td class="mem">0.5 GB</td></tr>
+          <tr><td><i class="fa-solid fa-box-archive"></i>S3 gateway (Versity) / web UI</td><td><code>17070 / 17071</code></td><td class="mem">0.25 GB</td></tr>
+          <tr><td><i class="fa-solid fa-play"></i>Replay service</td><td>—</td><td class="mem">0.5 GB</td></tr>
+          <tr><td><i class="fa-solid fa-wind"></i>Airflow <span class="tag opt" style="font-size:9px;padding:1px 5px;border-radius:4px">OPTIONAL</span></td><td><code>18080</code></td><td>profile</td></tr>
+        </tbody>
+      </table>
+      <p class="note">Seven core containers fit in a 7.65 GiB Docker VM (Apple M3), with no paid APIs or cloud services. Airflow runs as the
+        <code>orchestration</code> profile and does not fit alongside the full streaming stack.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const W = 1440, H = 720;
+const COLS = [
+  { x: 24,   w: 200, n: 1, t: "Public sources" },
+  { x: 248,  w: 200, n: 2, t: "Acquire & normalize" },
+  { x: 472,  w: 200, n: 3, t: "Replay → Kafka" },
+  { x: 696,  w: 214, n: 4, t: "Spark 4.1 streaming" },
+  { x: 934,  w: 226, n: 5, t: "Lakehouse & serving store" },
+  { x: 1184, w: 232, n: 6, t: "API, ML & UI" },
+];
+const C = i => COLS[i].x + 8, CW = i => COLS[i].w - 16;
+
+const NODES = {
+  sc:  { c: 0, y: 56,  h: 72, accent: "--blue",   icon: "fa-futbol", t: "SkillCorner", tag: ["pub","PUBLIC"], s: "A-League 2024/25 · 10 Hz · MIT" },
+  me:  { c: 0, y: 140, h: 72, accent: "--green",  icon: "fa-stopwatch", t: "Metrica", tag: ["loc","LOCAL"], s: "Sample games · 25 Hz · anonymized" },
+  sv:  { c: 0, y: 224, h: 72, accent: "--orange", icon: "fa-basketball", t: "NBA SportVU", tag: ["loc","LOCAL"], s: "2015–16 · 25 Hz · ~636 games" },
+  pbp: { c: 0, y: 308, h: 72, accent: "--orange", icon: "fa-list-ol", t: "NBA play-by-play", tag: ["loc","LOCAL"], s: "Archived events · running score" },
+
+  dl:  { c: 1, y: 56,  h: 80, accent: "--blue",   icon: "fa-download", t: "Download", s: "Pinned commits · sha256 per asset · safe extraction" },
+  ad:  { c: 1, y: 160, h: 92, accent: "--blue",   icon: "fa-shuffle", t: "Adapters", s: "One canonical contract: metres, centre origin, four clocks → parquet" },
+  cat: { c: 1, y: 276, h: 80, accent: "--blue",   icon: "fa-scale-balanced", t: "Catalog & licenses", s: "manifest.lock.json · public-demo flags" },
+
+  rp:  { c: 2, y: 56,  h: 92, accent: "--violet", icon: "fa-play", t: "Replay service", s: "Deterministic 0.5–100× · pause / speed · seeded faults" },
+  kt:  { c: 2, y: 180, h: 92, accent: "--orange", icon: "fa-diagram-project", t: "Kafka 4.3 · KRaft", s: "smip.tracking.v1 · 6 partitions · key = session|match" },
+  ctl: { c: 2, y: 304, h: 72, accent: "--violet", icon: "fa-sliders", t: "smip.control.v1", s: "pause · resume · speed · stop" },
+
+  bz:  { c: 3, y: 56,  h: 84, accent: "--blue",   icon: "fa-filter", t: "Bronze query", s: "Parse · validate the contract · quarantine bad records" },
+  en:  { c: 3, y: 172, h: 112, accent: "--cyan",  icon: "fa-gears", t: "Engine query", s: "applyInPandasWithState · 2 s reorder buffer · dedup · corrections · kinematics · 60 s windows · team shape" },
+  qr:  { c: 3, y: 316, h: 76, accent: "--red",    icon: "fa-ban", t: "Quarantine", s: "ops.quarantine · ClickHouse · smip.quarantine.v1" },
+
+  ice: { c: 4, y: 56,  h: 168, accent: "--blue",  icon: "fa-snowflake", t: "Apache Iceberg 1.11", s: "REST catalog · S3 gateway · files in ./lakehouse", tables: true },
+  ch:  { c: 4, y: 252, h: 92, accent: "--green",  icon: "fa-gauge-high", t: "ClickHouse 25.8", s: "ReplacingMergeTree · FINAL reads · sink ledger" },
+
+  api: { c: 5, y: 56,  h: 80, accent: "--green",  icon: "fa-code", t: "FastAPI", s: "Frames · metrics · heatmaps · lineage · public-demo guard" },
+  ml:  { c: 5, y: 152, h: 76, accent: "--violet", icon: "fa-brain", t: "Light ML", s: "Similar moments (kNN) · shape changes (PELT)" },
+  an:  { c: 5, y: 244, h: 76, accent: "--yellow", icon: "fa-user-tie", t: "Grounded analyst", s: "5 typed read-only tools · evidence ids · no LLM" },
+  ui:  { c: 5, y: 352, h: 80, accent: "--red",    icon: "fa-display", t: "React dashboard", s: "Live stage · players · pipeline · catalog" },
+
+  batch: { x: 248, y: 560, w: 424, h: 92, accent: "--violet", icon: "fa-layer-group", t: "Batch engine · same FeatureEngine",
+           s: "The identical engine over the normalized parquet. No Kafka, no Spark. 3,391 frames/s." },
+  par:   { x: 696, y: 560, w: 438, h: 92, accent: "--green", icon: "fa-equals", t: "Parity check", ok: true,
+           s: "Stream vs batch, every final window, row by row: 2,179 / 2,179 player windows · 200 / 200 team windows · 40,919 / 40,919 dwell cells" },
+  af:    { x: 1158, y: 560, w: 258, h: 92, accent: "--violet", icon: "fa-wind", t: "Airflow", tag: ["opt","OPTIONAL"],
+           s: "smip_data · smip_quality (parity + lineage)" },
+};
+
+const M = '<span class="measured">MEASURED</span>';
+const DETAILS = {
+  sc: `<p><strong>SkillCorner open data</strong>: A-League 2024/25 broadcast tracking at <strong>10 Hz</strong>, MIT licence (credit SkillCorner). This is the only source shown in the public demo.</p>
+       <ul><li>Pinned to a Git commit, sha256-checked per asset.</li><li>The <code>is_detected</code> flag (seen by the camera vs extrapolated) is kept end to end.</li><li>7 matches normalized locally, including Victory 3–4 Western United.</li></ul>`,
+  me: `<p><strong>Metrica sample data</strong>: 25 Hz, anonymized players. The data licence is not stated, so it stays <strong>local only</strong> and is hidden with <code>SMIP_PUBLIC_DEMO=1</code>.</p>
+       <ul><li>Anonymized players stay anonymous.</li></ul>`,
+  sv: `<p><strong>NBA SportVU 2015–16</strong>: 25 Hz, about 636 archived games. The downloader is MIT-licensed, but that is a licence for the code, not the data, so this stays <strong>local only</strong>.</p>
+       <ul><li>Sensor time is not the game clock; both are kept as separate clocks.</li><li>No possession feed: "offense" is a flagged positional heuristic.</li></ul>`,
+  pbp: `<p><strong>Archived NBA.com play-by-play</strong>, pinned at a commit. Scoring events are placed on the replay timeline by game clock to show a running score.</p>
+       <ul><li>Free throws show at the start of their stoppage; events inside tracking gaps show when tracking resumes.</li><li>Local only (licence unknown).</li></ul>`,
+  dl: `<p><strong><code>smip sources download</code></strong>: resumable downloads at pinned revisions, a sha256 per asset, safe zip / 7z extraction and byte budgets.</p>
+       <ul><li><code>smip sources available</code> lists matches; <code>--match</code> picks specific ones.</li><li>Raw data is never committed to Git.</li></ul>`,
+  ad: `<p><strong>Adapters</strong>, one file per provider (<code>skillcorner.py</code>, <code>metrica.py</code>, <code>sportvu.py</code>). Each one turns a provider's quirks into one canonical contract.</p>
+       <ul><li>Metres from the centre spot, plus attack-normalized x/y.</li><li>Four clocks: game clock, physical time, replay event time, processing time. Never mixed.</li><li>Output: <code>data/normalized/&lt;source&gt;/&lt;match&gt;/tracking.parquet</code>.</li></ul>`,
+  cat: `<p><strong>Catalog & licenses</strong>: <code>manifest.lock.json</code> and <code>DATA_SOURCES.md</code> record revision, checksum, licence and caveats for every source.</p>
+       <ul><li>Datasets with unresolved licences are kept out of the redistributable demo.</li><li>Public mode returns 404 for their sessions.</li></ul>`,
+  rp: `<p><strong>Replay service</strong>: reads the canonical parquet and produces frames to Kafka at 0.5× to 100×, deterministically.</p>
+       <ul><li>Pause, resume and speed changes re-anchor the schedule; event times do not change.</li><li>Seeded faults (seed 7): 3% duplicates, 2% out-of-order, 1% delayed, 1% corrections, 0.2% malformed.</li><li>Checkpoint every 2 s; a resume re-sends with <code>attempt+1</code>.</li></ul>
+       <p>Going live means replacing <em>this box only</em> with an adapter that reads a provider's live feed into the same topic.</p>`,
+  kt: `<p><strong>Kafka 4.3</strong> in KRaft mode, a single broker. Topic <code>smip.tracking.v1</code> has 6 partitions and 7 days of retention.</p>
+       <ul><li>Key = <code>session|match</code>: ordering per replay, without pretending to have a global order.</li><li>Idempotent producer, <code>acks=all</code>. Delivery is <strong>at-least-once</strong>.</li><li>Two consumers read it: the bronze query and the engine query.</li></ul>`,
+  ctl: `<p><strong><code>smip.control.v1</code></strong> (1 partition) carries pause / resume / speed / stop commands from the dashboard or the CLI to the replay service.</p>
+       <ul><li><code>smip replay control &lt;session&gt; pause</code></li><li>Click the speed buttons above: a violet control packet travels this path.</li></ul>`,
+  bz: `<p><strong>Bronze query</strong> (Spark Structured Streaming): parses each envelope and validates it against the contract.</p>
+       <ul><li>Valid records land in Iceberg bronze. Duplicates are kept here on purpose: bronze is the raw record.</li><li>Invalid records go to quarantine with a reason.</li><li>Every Iceberg commit is tagged <code>smip.commit=&lt;query&gt;:&lt;batch&gt;</code>, so a retried batch is skipped.</li></ul>`,
+  en: `<p><strong>Engine query</strong>: the stateful <code>FeatureEngine</code> inside <code>applyInPandasWithState</code>, one state per replay session.</p>
+       <ul><li>Reorder buffer of 2 s (20 frames soccer, 50 NBA). Duplicates dropped by sequence; corrections inside the buffer replace the original.</li>
+       <li>Causal EMA smoothing, so batch and stream agree. Jumps above 12.5 m/s are dropped.</li>
+       <li>60 s windows on <em>match time</em>, identical at any replay speed. Team width, depth, hull and defensive line per frame.</li>
+       <li>A 120 s idle timeout finalizes a session that never sends <code>end_of_stream</code>.</li></ul>`,
+  qr: `<p><strong>Quarantine</strong>: bad records are written to <code>ops.quarantine</code> in Iceberg, a ClickHouse table and the <code>smip.quarantine.v1</code> topic, with the raw payload and a reason.</p>
+       <ul><li>The session is taken from the Kafka key (<code>session_from=kafka_key</code>). The pipeline never guesses content.</li>
+       <li>Faults session: <strong>114 quarantined</strong> ${M}, 1,748 duplicates dropped, 589 corrections applied.</li></ul>`,
+  ice: `<p><strong>Apache Iceberg 1.11</strong> behind a REST catalog, stored as real files in <code>./lakehouse</code> through an S3 gateway. The lakehouse of record.</p>
+       <ul><li>bronze <code>kafka_tracking_raw</code> · silver frames and positions · gold player / team windows and dwell · ops quarantine and stats.</li>
+       <li>Idempotent per micro-batch through the commit tag.</li><li>Not automated yet: compaction and snapshot expiry.</li></ul>`,
+  ch: `<p><strong>ClickHouse 25.8</strong>: the fast serving store for the dashboard.</p>
+       <ul><li><code>ReplacingMergeTree(version)</code> on natural keys; readers use <code>FINAL</code>, so a replayed row replaces itself.</li>
+       <li><code>sink_ledger</code> records every (query, batch, sink, rows), so a retry is visible.</li>
+       <li>Produce → queryable at 20×: <strong>p50 3.4 s · p95 6.3 s</strong> ${M} (2 s trigger).</li></ul>`,
+  api: `<p><strong>FastAPI</strong> on <code>127.0.0.1:18000</code>. It serves frames, metrics, heatmaps, sessions and lineage, plus the built React app.</p>
+       <ul><li>Everything "live" is bounded by the replay cursor: at minute 30 you only see minutes 0–30.</li><li>Public-demo guard: 404 for datasets without a known licence.</li></ul>`,
+  ml: `<p><strong>Light ML</strong>, retrieval and statistics, not prediction.</p>
+       <ul><li><strong>Similar moments</strong>: kNN (NumPy) over team-shape vectors. Lift over random: <strong>1.48× and 1.44×</strong> ${M}.</li>
+       <li><strong>Shape changes</strong>: PELT (<code>ruptures</code>) on 10 s bins. 26 / 29 change points per soccer session, each with evidence. No ground truth, so no accuracy claim.</li></ul>`,
+  an: `<p><strong>Grounded analyst</strong>, deterministic, with no LLM. Questions route to one of five typed tools.</p>
+       <ul><li>Fixed, parameterized ClickHouse queries: <code>readonly=2</code>, 5 s timeout, 5,000-row cap. No model-generated SQL, no shell, no write path.</li>
+       <li>Every number has an evidence id. Prompt injection and SQL are refused.</li><li>Eval: <strong>15 / 15</strong> ${M}.</li></ul>`,
+  ui: `<p><strong>React 18 + TypeScript + Vite</strong>. The stage is drawn on a canvas.</p>
+       <ul><li>Trails, team hulls, defensive line, player heatmap.</li><li>Geometric Voronoi, which is explicitly <em>not</em> pitch control.</li><li>Timeline with shape-change markers; Players, Pipeline and Catalog views.</li></ul>`,
+  batch: `<p><strong>Batch engine</strong>: the very same <code>FeatureEngine</code> class, called over the normalized parquet. No Kafka, no Spark.</p>
+       <ul><li><strong>3,391 frames/s</strong> ${M}.</li><li>One engine, two runtimes: changing a threshold changes both, and bumps <code>feature_version</code>.</li></ul>`,
+  par: `<p><strong>Parity check</strong>: compares the stream's final windows with the batch run, row by row.</p>
+       <ul><li>Hero session: 2,179 / 2,179 player windows, 200 / 200 team windows, 40,919 / 40,919 dwell cells ${M}.</li>
+       <li>Faults session: 2,209 / 2,209 · 204 / 204 · 41,579 / 41,579, exact despite the injected faults ${M}.</li>
+       <li>The claim is <strong>effectively-once per session</strong>, not "exactly-once end to end". Checked by <code>make verify</code> (15 / 15).</li></ul>`,
+  af: `<p><strong>Airflow</strong>, the optional <code>orchestration</code> profile (port 18080).</p>
+       <ul><li><code>smip_quality</code>: parity + lineage. It ran successfully.</li><li><code>smip_data</code>: download → normalize → catalog. Defined, not triggered during verification.</li>
+       <li>It does not fit in 7.65 GiB together with the full streaming stack.</li></ul>`,
+};
+
+// edges: [from, to, kind, fromSide, toSide, opts]
+const EDGES = [
+  ["sc","dl","acq","r","l"], ["me","dl","acq","r","l"], ["sv","dl","acq","r","l"], ["pbp","dl","acq","r","l"],
+  ["dl","ad","acq","b","t"], ["ad","cat","acq","b","t"],
+  ["ad","rp","data","r","l"],
+  ["rp","kt","data","b","t"],
+  ["kt","bz","data","r","l"], ["kt","en","data","r","l"],
+  ["bz","qr","bad","l","l",{bend:46}],
+  ["bz","ice","data","r","l"], ["en","ice","data","r","l"],
+  ["bz","ch","data","r","l"], ["en","ch","data","r","l"],
+  ["ch","api","data","r","l"], ["ch","ml","data","r","l"], ["ch","an","data","r","l"],
+  ["api","ui","data","r","r",{bend:34}], ["ml","ui","data","r","r",{bend:22}], ["an","ui","data","r","r",{bend:12}],
+  ["ui","ctl","ctl","b","b",{dip:120}], ["ctl","rp","ctl","l","l",{bend:40}],
+  ["cat","batch","ctl","b","t"], ["batch","par","ctl","r","l"], ["ch","par","ctl","b","t"],
+  ["af","par","ctl","l","r"],
+];
+
+const stage = document.getElementById("stage"), shell = document.getElementById("shell");
+const nodesEl = document.getElementById("nodes"), edgesEl = document.getElementById("edges");
+const packetsEl = document.getElementById("packets"), fxEl = document.getElementById("fx");
+const SVGNS = "http://www.w3.org/2000/svg";
+
+COLS.forEach(c => {
+  const bg = document.createElement("div"); bg.className = "col-bg";
+  Object.assign(bg.style, { left: c.x + "px", width: c.w + "px", height: "530px" }); nodesEl.appendChild(bg);
+  const h = document.createElement("div"); h.className = "col-head"; h.style.left = (c.x + 12) + "px";
+  h.innerHTML = `<b>${c.n}</b>${c.t}`; nodesEl.appendChild(h);
+});
+
+const box = {};
+for (const [id, n] of Object.entries(NODES)) {
+  const x = n.x ?? C(n.c), w = n.w ?? CW(n.c);
+  box[id] = { x, y: n.y, w, h: n.h };
+  const el = document.createElement("div");
+  el.className = "node"; el.id = "n-" + id;
+  Object.assign(el.style, { left: x + "px", top: n.y + "px", width: w + "px", height: n.h + "px" });
+  el.style.setProperty("--accent", `var(${n.accent})`);
+  const tag = n.tag ? `<span class="tag ${n.tag[0]}">${n.tag[1]}</span>` : "";
+  const tables = n.tables ? `<div class="tables">
+      <div><b style="color:var(--orange)">BRONZE</b>kafka_tracking_raw</div><div><b style="color:#cbd5e1">SILVER</b>frames · positions</div>
+      <div><b style="color:var(--yellow)">GOLD</b>player / team windows</div><div><b style="color:var(--red)">OPS</b>quarantine · stats</div></div>` : "";
+  el.innerHTML = `${n.ok ? '<span class="badge-ok">EXACT</span>' : ""}
+    <div class="row"><div class="ic"><i class="fa-solid ${n.icon}"></i></div><div class="t">${n.t}${tag}</div></div>
+    <div class="s">${n.s}</div>${tables}`;
+  el.addEventListener("click", () => select(id));
+  nodesEl.appendChild(el);
+  n.el = el;
+}
+
+function anchor(id, side) {
+  const b = box[id];
+  return side === "r" ? [b.x + b.w, b.y + b.h / 2] : side === "l" ? [b.x, b.y + b.h / 2]
+       : side === "t" ? [b.x + b.w / 2, b.y] : [b.x + b.w / 2, b.y + b.h];
+}
+function ctrl([x, y], side, d) {
+  return side === "r" ? [x + d, y] : side === "l" ? [x - d, y] : side === "t" ? [x, y - d] : [x, y + d];
+}
+const edges = EDGES.map(([from, to, kind, fs, ts, opt = {}]) => {
+  const a = anchor(from, fs), b = anchor(to, ts);
+  let d;
+  if (opt.bend) d = opt.bend;
+  else if (opt.dip) d = opt.dip;
+  else d = Math.max(30, Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.42);
+  const c1 = ctrl(a, fs, d), c2 = ctrl(b, ts, d);
+  const p = document.createElementNS(SVGNS, "path");
+  p.setAttribute("d", `M${a[0]},${a[1]} C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${b[0]},${b[1]}`);
+  p.setAttribute("class", "edge " + (kind === "acq" ? "acq" : kind === "ctl" ? "ctl" : ""));
+  p.setAttribute("marker-end", kind === "ctl" ? "url(#arrow-v)" : "url(#arrow)");
+  if (kind === "bad") p.style.stroke = "rgba(248,113,113,.4)";
+  edgesEl.appendChild(p);
+  return { from, to, kind, el: p, len: p.getTotalLength() };
+});
+const edgeOf = (f, t) => edges.find(e => e.from === f && e.to === t);
+
+function label(x, y, text, anchorPos = "middle") {
+  const t = document.createElementNS(SVGNS, "text");
+  t.setAttribute("x", x); t.setAttribute("y", y); t.setAttribute("class", "edge-label"); t.setAttribute("text-anchor", anchorPos);
+  t.textContent = text; edgesEl.appendChild(t);
+}
+label(box.ui.x - 236, box.ui.y + box.ui.h + 58, "control: UI / CLI → smip.control.v1 → replay");
+label(box.batch.x + 6, box.batch.y - 12, "same engine over the clean parquet", "start");
+label(box.par.x + box.par.w - 4, box.par.y - 12, "ClickHouse stream results", "end");
+
+// ---------- inspector ----------
+const inspector = document.getElementById("inspector");
+let selected = null;
+function select(id) {
+  if (selected) NODES[selected].el.classList.remove("sel");
+  selected = id; const n = NODES[id];
+  n.el.classList.add("sel");
+  edges.forEach(e => e.el.classList.toggle("hot", e.from === id || e.to === id));
+  inspector.style.setProperty("--accent", `var(${n.accent})`);
+  inspector.innerHTML = `<div class="ins-t"><i class="fa-solid ${n.icon}"></i>${n.t}</div>${DETAILS[id]}`;
+}
+
+// ---------- packets ----------
+const COLORS = { sc: "#38bdf8", sv: "#fb923c", me: "#34d399", dup: "#facc15", bad: "#f87171", cor: "#34d399", ctl: "#c084fc", acq: "#64748b" };
+let packets = [], playing = true, speed = 20, faults = false;
+const counts = { frames: 0, dup: 0, cor: 0, q: 0 };
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function spawn(from, to, kind, color, opts = {}) {
+  const e = edgeOf(from, to); if (!e || packets.length > 420) return;
+  const c = document.createElementNS(SVGNS, "circle");
+  c.setAttribute("r", opts.r ?? (kind === "acq" ? 2.6 : 3.8));
+  c.setAttribute("fill", color);
+  if (kind !== "acq") c.setAttribute("filter", "url(#glow)");
+  packetsEl.appendChild(c);
+  packets.push({ e, kind, color, el: c, s: 0, v: opts.v ?? 1, meta: opts.meta ?? {} });
+}
+function pulse(id) {
+  const el = NODES[id].el; el.classList.remove("pulse"); void el.offsetWidth; el.classList.add("pulse");
+}
+function burst(id, color, text) {
+  const b = box[id], x = b.x + b.w - 22, y = b.y + 14;
+  const g = document.createElementNS(SVGNS, "g"); g.setAttribute("class", "burst");
+  const r = document.createElementNS(SVGNS, "circle"); r.setAttribute("cx", x); r.setAttribute("cy", y); r.setAttribute("r", 3);
+  r.setAttribute("fill", "none"); r.setAttribute("stroke", color); r.setAttribute("stroke-width", 2);
+  const t = document.createElementNS(SVGNS, "text"); t.setAttribute("x", x - 8); t.setAttribute("y", y - 8);
+  t.setAttribute("fill", color); t.setAttribute("font-size", "10.5"); t.setAttribute("font-weight", "800"); t.setAttribute("text-anchor", "end");
+  t.textContent = text; g.append(r, t); fxEl.appendChild(g);
+  const t0 = performance.now();
+  (function grow(now) {
+    const k = Math.min(1, (now - t0) / 700);
+    r.setAttribute("r", 3 + k * 16); g.setAttribute("opacity", 1 - k); t.setAttribute("y", y - 8 - k * 10);
+    k < 1 ? requestAnimationFrame(grow) : g.remove();
+  })(t0);
+}
+const bump = (k) => { counts[k]++; document.getElementById("c-" + (k === "frames" ? "frames" : k)).textContent = counts[k].toLocaleString(); };
+
+function arrive(p) {
+  const at = p.e.to, k = p.kind, m = p.meta;
+  pulse(at);
+  switch (at) {
+    case "dl": if (Math.random() < .5) spawn("dl", "ad", "acq", COLORS.acq); break;
+    case "ad": if (Math.random() < .35) spawn("ad", "cat", "acq", COLORS.acq); break;
+    case "rp": {
+      if (k === "ctl") { burst("rp", COLORS.ctl, m.cmd || "control"); break; }
+      bump("frames");
+      const base = { meta: { src: m.src } };
+      if (faults && Math.random() < .08) {
+        spawn("rp", "kt", "bad", COLORS.bad, { meta: { src: m.src, bad: true } });
+        break;
+      }
+      if (faults && Math.random() < .07) {
+        spawn("rp", "kt", "cor", COLORS.cor, { meta: { src: m.src, cor: true } });
+        break;
+      }
+      spawn("rp", "kt", "data", p.color, base);
+      if (faults && Math.random() < .14) setTimeout(() => spawn("rp", "kt", "dup", COLORS.dup, { meta: { src: m.src, dup: true } }), 90);
+      break;
+    }
+    case "kt":
+      spawn("kt", "bz", k, p.color, { meta: m });
+      spawn("kt", "en", k, p.color, { meta: m });
+      break;
+    case "bz":
+      if (m.bad) { spawn("bz", "qr", "bad", COLORS.bad, { meta: m }); break; }
+      spawn("bz", Math.random() < .55 ? "ice" : "ch", k, p.color, { meta: m, r: 3 });
+      break;
+    case "en":
+      if (m.dup) { bump("dup"); burst("en", COLORS.dup, "duplicate dropped"); break; }
+      if (m.bad) break;
+      if (m.cor) { bump("cor"); burst("en", COLORS.cor, "correction applied"); }
+      spawn("en", Math.random() < .5 ? "ice" : "ch", "data", m.cor ? COLORS.sc : p.color, { meta: m });
+      break;
+    case "qr": bump("q"); burst("qr", COLORS.bad, "quarantined"); break;
+    case "ch": {
+      if (p.kind === "ctl") break;
+      const r = Math.random(), to = r < .6 ? "api" : r < .8 ? "ml" : "an";
+      spawn("ch", to, "data", p.color, { meta: m });
+      break;
+    }
+    case "api": case "ml": case "an": spawn(at, "ui", "data", p.color, { meta: m }); break;
+    case "ctl": spawn("ctl", "rp", "ctl", COLORS.ctl, { meta: m, v: 1.2 }); break;
+    case "batch": break;
+    case "par": burst("par", "#34d399", "✓ exact"); break;
+  }
+}
+
+function sendControl(cmd) { spawn("ui", "ctl", "ctl", COLORS.ctl, { meta: { cmd }, v: 1.3 }); }
+
+// sources & sport mix
+function pickSrc() { const r = Math.random(); return r < .62 ? "sc" : r < .85 ? "sv" : "me"; }
+
+let last = performance.now(), acc = 0, accAcq = 0, accPar = 0;
+function tick(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const pxs = { 1: 120, 5: 190, 20: 280, 100: 430 }[speed];
+  if (playing) {
+    acc += dt * { 1: 3, 5: 6, 20: 10, 100: 18 }[speed];
+    while (acc >= 1) { acc -= 1; const s = pickSrc(); spawn("ad", "rp", "data", COLORS[s], { meta: { src: s } }); }
+    accAcq += dt;
+    if (accAcq > 1.1) { accAcq = 0; spawn(["sc","me","sv","pbp"][Math.floor(Math.random() * 4)], "dl", "acq", COLORS.acq); }
+    accPar += dt;
+    if (accPar > 4.2) { accPar = 0; spawn("cat", "batch", "ctl", COLORS.ctl); spawn("batch", "par", "ctl", COLORS.ctl); spawn("ch", "par", "ctl", COLORS.ctl); }
+  }
+  for (const p of packets) {
+    const control = p.e.kind === "ctl" && (p.e.from === "ui" || p.e.from === "ctl");
+    if (!playing && !control) continue;
+    p.s += (dt * pxs * p.v * (p.kind === "acq" ? .45 : 1)) / p.e.len;
+    if (p.s >= 1) { p.done = true; continue; }
+    const pt = p.e.el.getPointAtLength(p.s * p.e.len);
+    p.el.setAttribute("cx", pt.x); p.el.setAttribute("cy", pt.y);
+  }
+  const done = packets.filter(p => p.done);
+  packets = packets.filter(p => !p.done);
+  for (const p of done) { p.el.remove(); arrive(p); }
+  requestAnimationFrame(tick);
+}
+
+// ---------- controls ----------
+const playBtn = document.getElementById("play");
+playBtn.onclick = () => {
+  playing = !playing;
+  playBtn.classList.toggle("on", playing);
+  playBtn.innerHTML = playing ? '<i class="fa-solid fa-pause"></i><span>Pause</span>' : '<i class="fa-solid fa-play"></i><span>Resume</span>';
+  sendControl(playing ? "resume" : "pause");
+};
+document.querySelectorAll("#speeds button").forEach(b => b.onclick = () => {
+  speed = +b.dataset.speed;
+  document.querySelectorAll("#speeds button").forEach(x => x.classList.toggle("on", x === b));
+  sendControl(`speed ${speed}×`);
+});
+const faultBtn = document.getElementById("faults");
+faultBtn.onclick = () => {
+  faults = !faults; faultBtn.classList.toggle("on", faults);
+  faultBtn.querySelector("span").textContent = faults ? "Faults on (rates exaggerated)" : "Inject faults";
+};
+
+// ---------- fit stage to width ----------
+function fit() {
+  const s = Math.min(1.25, shell.clientWidth / W);
+  stage.style.transform = `scale(${s})`; shell.style.height = (H * s) + "px";
+}
+addEventListener("resize", fit); fit();
+
+if (!reduce) requestAnimationFrame(tick);
+setTimeout(() => sendControl("speed 20×"), 400);
+
+// ---------- background: tracking dots on a pitch ----------
+const bg = document.getElementById("bg"), g = bg.getContext("2d");
+let BW, BH;
+function size() { BW = bg.width = innerWidth * devicePixelRatio; BH = bg.height = innerHeight * devicePixelRatio; }
+addEventListener("resize", size); size();
+const ball = { x: .5, y: .5, tx: .5, ty: .5 };
+const players = Array.from({ length: 22 }, (_, i) => {
+  const home = i < 11, row = i % 11;
+  const bx = home ? .18 + (row % 4) * .1 : .82 - (row % 4) * .1, by = .15 + (row * .067) % .7;
+  return { home, bx, by, x: bx, y: by, trail: [] };
+});
+function drawPitch() {
+  const pad = 40 * devicePixelRatio, w = BW - 2 * pad, h = BH - 2 * pad;
+  g.strokeStyle = "rgba(56,189,248,.10)"; g.lineWidth = 1.2 * devicePixelRatio;
+  g.strokeRect(pad, pad, w, h);
+  g.beginPath(); g.moveTo(BW / 2, pad); g.lineTo(BW / 2, pad + h); g.stroke();
+  g.beginPath(); g.arc(BW / 2, BH / 2, Math.min(w, h) * .13, 0, Math.PI * 2); g.stroke();
+  g.strokeRect(pad, BH / 2 - h * .22, w * .1, h * .44); g.strokeRect(pad + w * .9, BH / 2 - h * .22, w * .1, h * .44);
+  g.strokeStyle = "rgba(56,189,248,.035)";
+  for (let x = pad; x < pad + w; x += 44 * devicePixelRatio) { g.beginPath(); g.moveTo(x, pad); g.lineTo(x, pad + h); g.stroke(); }
+  for (let y = pad; y < pad + h; y += 44 * devicePixelRatio) { g.beginPath(); g.moveTo(pad, y); g.lineTo(pad + w, y); g.stroke(); }
+  return { pad, w, h };
+}
+let bt = 0;
+function bgTick() {
+  bt += 1 / 60;
+  g.clearRect(0, 0, BW, BH);
+  const { pad, w, h } = drawPitch();
+  if (Math.random() < .012) { ball.tx = .15 + Math.random() * .7; ball.ty = .15 + Math.random() * .7; }
+  ball.x += (ball.tx - ball.x) * .02; ball.y += (ball.ty - ball.y) * .02;
+  const shift = (ball.x - .5) * .35;
+  const P = (x, y) => [pad + x * w, pad + y * h];
+  for (const [team, color, fill] of [[true, "rgba(56,189,248,.20)", "rgba(56,189,248,.05)"], [false, "rgba(251,146,60,.20)", "rgba(251,146,60,.05)"]]) {
+    const pts = players.filter(p => p.home === team).map(p => P(p.x, p.y));
+    const hull = convexHull(pts);
+    g.beginPath(); hull.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath();
+    g.fillStyle = fill; g.fill(); g.strokeStyle = color; g.lineWidth = 1 * devicePixelRatio; g.stroke();
+  }
+  for (const p of players) {
+    const tx = p.bx + shift + Math.sin(bt * .6 + p.by * 9) * .02 + (ball.x - p.bx) * .08;
+    const ty = p.by + Math.cos(bt * .5 + p.bx * 7) * .02 + (ball.y - p.by) * .1;
+    p.x += (tx - p.x) * .03; p.y += (ty - p.y) * .03;
+    p.trail.push(P(p.x, p.y)); if (p.trail.length > 40) p.trail.shift();
+    g.beginPath(); p.trail.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+    g.strokeStyle = p.home ? "rgba(56,189,248,.25)" : "rgba(251,146,60,.25)"; g.lineWidth = 1.4 * devicePixelRatio; g.stroke();
+    const [x, y] = P(p.x, p.y);
+    g.beginPath(); g.arc(x, y, 3.6 * devicePixelRatio, 0, Math.PI * 2);
+    g.fillStyle = p.home ? "rgba(56,189,248,.75)" : "rgba(251,146,60,.75)"; g.fill();
+  }
+  const [bx, by] = P(ball.x, ball.y);
+  g.beginPath(); g.arc(bx, by, 3 * devicePixelRatio, 0, Math.PI * 2); g.fillStyle = "rgba(255,255,255,.85)"; g.fill();
+  if (!reduce) requestAnimationFrame(bgTick);
+}
+function convexHull(pts) {
+  const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const q of p) { while (lo.length >= 2 && cross(lo.at(-2), lo.at(-1), q) <= 0) lo.pop(); lo.push(q); }
+  for (const q of p.reverse()) { while (up.length >= 2 && cross(up.at(-2), up.at(-1), q) <= 0) up.pop(); up.push(q); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+bgTick();
+window.__ready = true;
+</script>
+</body>
+</html>
